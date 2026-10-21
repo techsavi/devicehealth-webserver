@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local services</title>
+  <style>
+    :root {
+      --bg: #0f1419; --card: #18202a; --inner: #0f1419; --line: #2a3542;
+      --text: #e6edf3; --muted: #8b98a5; --accent: #4ea8ff;
+      --ok: #22c55e; --bad: #ef4444; --warn: #f59e0b;
+      color-scheme: dark;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #f3f5f8; --card: #fff; --inner: #f3f5f8; --line: #dde3ea; --text: #17202a; --muted: #5c6b7a; --accent: #1d6fd6; color-scheme: light; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    header { padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--card); }
+    header h1 { font-size: 19px; margin: 0; }
+    main { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; padding: 16px; max-width: 1200px; margin: 0 auto; }
+    .tile {
+      display: flex; flex-direction: column; gap: 10px; min-width: 0;
+      background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px;
+      transition: border-color .15s;
+    }
+    .tile:hover, .tile:focus-within { border-color: var(--accent); }
+    .tile > a { display: flex; flex-direction: column; gap: 6px; color: inherit; text-decoration: none; outline: none; }
+    .tile .foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+    .tile .foot a { text-decoration: none; }
+    .svc, .linkrow { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+    .linkrow { flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 8px; }
+    .linkrow:empty { display: none; }
+    .linkrow a { color: var(--accent); text-decoration: none; }
+    :is(.svc, .linkrow) .led { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+    :is(.svc, .linkrow) .led.on { background: var(--ok); } :is(.svc, .linkrow) .led.off { background: var(--bad); } :is(.svc, .linkrow) .led.wait { background: var(--warn); }
+    :is(.svc, .linkrow) :is(button, select) { font: inherit; font-size: 12px; padding: 3px 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); background: var(--inner); color: var(--text); }
+    :is(.svc, .linkrow) button:hover:not(:disabled) { border-color: var(--accent); }
+    :is(.svc, .linkrow) button:disabled { opacity: .6; cursor: progress; }
+    :is(.svc, .linkrow) .err { color: var(--bad); flex-basis: 100%; }
+    .svc .note { flex-basis: 100%; }
+    .tile h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .tile .desc { color: var(--muted); font-size: 14px; }
+    .tile .path { color: var(--accent); font-size: 13px; margin-top: auto; }
+    .pill { font-size: 12px; padding: 2px 10px; border-radius: 99px; background: var(--line); color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .pill.on { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+    .pill.off { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+    .device { background: var(--inner); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+    .device .name { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+    .device .wx { font-size: 22px; font-weight: 600; }
+    .meta { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+    .alerts { font-size: 13px; color: var(--warn); }
+    .pill.warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; margin: 4px 0; }
+    .stat { background: var(--inner); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-width: 0; }
+    .stat .k { font-size: 12px; color: var(--muted); }
+    .stat .v { font-size: 17px; font-weight: 600; }
+    .stat .v.warn { color: var(--warn); } .stat .v.bad { color: var(--bad); }
+    .issues { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+    .issues li { display: flex; gap: 8px; align-items: baseline; }
+    .issues .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+    .issues .dot.critical { background: var(--bad); }
+    .issues .msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .issues .age { flex: none; color: var(--muted); font-size: 12px; }
+    /* Live alerts from the MQTT broker (alerts/+/+), warnings and up. */
+    .banner { max-width: 1200px; margin: 16px auto 0; padding: 0 16px; display: flex; flex-direction: column; gap: 6px; }
+    .banner:empty { display: none; }
+    .banner .alert details.help { flex-basis: 100%; font-size: 13px; color: var(--muted); margin-top: -4px; }
+    .banner .alert details.help > summary { cursor: pointer; width: max-content; }
+    .banner .alert details.help p { margin: 4px 0 2px; color: var(--text); line-height: 1.45; }
+    .banner .alert details.help ol { margin: 4px 0 2px; padding-left: 22px; color: var(--text); line-height: 1.5; }
+    .banner .alert details.help li { margin: 2px 0; }
+    .banner .alert details.help code { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; background: var(--inner); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; user-select: all; }
+    .banner .alert details.help a { color: var(--accent); }
+    .banner .alert { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); font-size: 14px; }
+    .banner .alert.warning { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+    .banner .alert.critical { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--card)); }
+    .banner .lvl { flex: none; font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--warn); }
+    .banner .critical .lvl { color: var(--bad); }
+    .banner .msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .banner .age { flex: none; color: var(--muted); font-size: 12px; }
+    .banner .hide { flex: none; font: inherit; font-size: 16px; line-height: 1; padding: 0 4px; border: 0; background: none; color: var(--muted); cursor: pointer; }
+    .banner .hide:hover { color: var(--text); }
+    .banner .hidden-note { font-size: 12px; color: var(--muted); padding: 0 4px; }
+    .banner .link { font: inherit; border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; }
+    .send form { display: flex; flex-direction: column; gap: 8px; }
+    .send :is(input, textarea, select) { font: inherit; font-size: 14px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--inner); color: var(--text); width: 100%; }
+    .send .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .send .row > * { flex: 1 1 120px; }
+    .send button { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); background: var(--inner); color: var(--text); }
+    .send button:hover:not(:disabled) { border-color: var(--accent); }
+    .send button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .send .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+    .send .sent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+    .send .sent li { display: flex; gap: 8px; align-items: center; }
+    .send .sent .msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .send .result { font-size: 13px; color: var(--muted); min-height: 1em; }
+    .send .result.err { color: var(--bad); }
+    .clients { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+    .dev-group { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 6px 0 3px; }
+    .dev-group:first-child { margin-top: 0; }
+    .pi-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+    .pi-list li { display: flex; align-items: baseline; gap: 8px; }
+    .pi-list .led { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--line); align-self: center; }
+    .pi-list .led.on { background: var(--ok); } .pi-list .led.off { background: var(--bad); }
+    .pi-list .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pi-list .muted { color: var(--muted); font-size: 13px; }
+    .pi-list .what { flex: none; color: var(--muted); font-size: 13px; }
+    .pi-list li.away { opacity: .6; }
+    .pi-list .what.bad { color: var(--bad); flex: 0 1 auto; overflow-wrap: anywhere; }
+    .pi-list .sig { display: inline-flex; align-items: flex-end; gap: 1px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+    .pi-list .sig i { width: 3px; background: var(--line); }
+    .pi-list .sig.good i.on { background: var(--ok); } .pi-list .sig.fair i.on { background: var(--warn); } .pi-list .sig.poor i.on { background: var(--bad); }
+    /* Rearranging: drag a tile by its grip (mouse or touch), or focus the grip and use the arrow keys. */
+    .tile { position: relative; }
+    .grip { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); width: 44px; height: 14px; padding: 0; border: 0; border-radius: 7px;
+      background: transparent; color: var(--muted); font-size: 12px; line-height: 14px; letter-spacing: 2px; cursor: grab; touch-action: none; opacity: .35; }
+    .tile:hover .grip, .grip:focus-visible { opacity: 1; background: var(--line); outline: none; }
+    .tile.dragging { opacity: .55; outline: 2px dashed var(--accent); outline-offset: 2px; }
+    body.dragging, body.dragging * { cursor: grabbing !important; user-select: none; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    #reset-order { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--inner); color: var(--muted); cursor: pointer; }
+    .clients span::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; background: var(--bad); }
+    .clients span.online::before { background: var(--ok); }
+    .clients span.away { opacity: .6; } .clients span.away::before { background: var(--line); }
+  </style>
+</head>
+<body>
+  <header><h1>Local services</h1><button type="button" id="reset-order" hidden>Reset tile order</button></header>
+  <section class="banner" id="alerts" aria-live="polite"></section>
+  <main>
+    <article class="tile" id="tabletpanel" data-service="tabletpanel">
+      <a href="/tabletpanel/">
+        <h2>TabletPanel <span class="pill" id="tp-pill">…</span></h2>
+        <div id="tp-body" class="meta">Loading…</div>
+      </a>
+      <div class="foot"><a class="path" href="/tabletpanel/">/tabletpanel/</a><span class="svc"></span></div>
+    </article>
+    <article class="tile" id="statuspanel" data-service="statuspanel">
+      <a href="/statuspanel/">
+        <h2>Server status <span class="pill" id="sp-pill">…</span></h2>
+        <div id="sp-body" class="meta">Loading…</div>
+      </a>
+      <div class="foot"><a class="path" href="/statuspanel/">/statuspanel/</a><span class="svc"></span></div>
+    </article>
+    <article class="tile" id="pis">
+      <a href="/devices/">
+        <h2>IoT Devices <span class="pill" id="dev-pill">…</span></h2>
+        <div id="dev-body" class="meta">Waiting for reports…</div>
+      </a>
+      <div class="foot"><a class="path" href="/devices/">/devices/ · status and management</a></div>
+    </article>
+    <article class="tile send" id="send">
+      <h2>Send alert</h2>
+      <div class="presets" id="presets"></div>
+      <form id="alert-form">
+        <input name="title" placeholder="Title" maxlength="120">
+        <textarea name="message" placeholder="Message (optional)" rows="2" maxlength="500"></textarea>
+        <div class="row">
+          <select name="level" aria-label="Level">
+            <option value="info">Info</option><option value="warning">Warning</option><option value="critical">Critical (full screen)</option>
+          </select>
+          <select name="duration" aria-label="Show for">
+            <option value="">Default time</option><option value="60">1 min</option><option value="300">5 min</option>
+            <option value="1800">30 min</option><option value="3600">1 hour</option><option value="0">Until cleared</option>
+          </select>
+          <button type="submit" class="primary">Send to all displays</button>
+        </div>
+        <div class="result" id="send-result"></div>
+      </form>
+      <ul class="sent" id="sent"></ul>
+      <div class="meta">Published on the MQTT bus as <code>alerts/manual/…</code>, so the tablets, the Pi and every other display get it.</div>
+    </article>
+    <article class="tile" id="mqtt" data-service="mqtt">
+      <a href="/mqtt/">
+        <h2>MQTT broker <span class="pill" id="mq-pill">…</span></h2>
+        <div id="mq-body" class="meta">Connecting…</div>
+      </a>
+      <div class="foot"><a class="path" href="/mqtt/">/mqtt/</a><span class="svc"></span></div>
+    </article>
+  </main>
+  <!-- This PC's own tiles, if any (front/local/tiles.js, not in git; empty when there is none). -->
+  <script src="/local/tiles.js"></script>
+  <script src="/vendor/mqtt.min.js"></script>
+  <script src="/mqtt/bus.js?v=6"></script>
+  <script>
+    // Live summary of the TabletPanel weather displays, mirroring the "Displays" card in its own UI.
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const ago = (iso) => {
+      const s = Math.round((Date.now() - Date.parse(iso)) / 1000);
+      return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
+    };
+
+    function deviceHtml(d) {
+      const s = d.status ?? {};
+      const wx = s.temperature != null ? `${Math.round(s.temperature)}° ${esc(s.condition ?? '')}` : '—';
+      const where = s.place ?? (s.lat != null ? `${s.lat.toFixed(2)}, ${s.lon.toFixed(2)}` : null);
+      const light = s.lightSensor == null ? '' : s.lightSensor ? `💡 ${s.lux ?? '?'} lux` : '';
+      const extras = [light, s.dimmed ? `🌙 dimmed (${esc(s.dimmed)})` : '', s.battery != null ? `🔋 ${s.battery}%` : ''].filter(Boolean).join(' · ');
+      return `<div class="device">
+        <div class="name">${esc(d.name)} <span class="pill ${d.connected ? 'on' : 'off'}">${d.connected ? 'online' : `offline · ${ago(d.lastSeen)}`}</span></div>
+        <div class="wx">${wx}</div>
+        ${where ? `<div class="meta">📍 ${esc(where)}</div>` : ''}
+        <div class="meta">Showing <b>${esc(s.focus ?? '?')}</b>${s.outlook ? ` · ${esc(s.outlook)}` : ''}</div>
+        ${extras ? `<div class="meta">${extras}</div>` : ''}
+      </div>`;
+    }
+
+    async function refreshTabletPanel() {
+      const pill = document.getElementById('tp-pill');
+      const body = document.getElementById('tp-body');
+      try {
+        const res = await fetch('/tabletpanel/api/state', { cache: 'no-store' });
+        if (res.status === 401) throw new Error('API key required');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const state = await res.json();
+        const online = state.devices.filter((d) => d.connected).length;
+        pill.className = `pill ${online ? 'on' : 'off'}`;
+        pill.textContent = `${online} of ${state.devices.length} online`;
+        const alerts = state.alerts.length ? `<div class="alerts">⚠ ${state.alerts.length} active alert${state.alerts.length > 1 ? 's' : ''}: ${state.alerts.map((a) => esc(a.title ?? a.message)).join(', ')}</div>` : '';
+        body.className = '';
+        body.innerHTML = state.devices.length
+          ? state.devices.map(deviceHtml).join('') + alerts
+          : `<div class="meta">Weather display control. No tablets have connected yet.</div>${alerts}`;
+      } catch (e) {
+        pill.className = 'pill off';
+        pill.textContent = 'unavailable';
+        body.className = 'meta';
+        body.textContent = `TabletPanel server not reachable (${e.message}).`;
+      }
+    }
+
+    refreshTabletPanel();
+    setInterval(refreshTabletPanel, 15000);
+
+    // Server health from StatusPanel's REST API (GET /statuspanel/api/summary).
+    const agoSec = (ts) => (ts ? ago(new Date(ts * 1000).toISOString()) : '—');
+    const PILL = { ok: ['on', 'healthy'], warning: ['warn', 'warning'], critical: ['off', 'critical'] };
+
+    function stat(label, value, cls = '') {
+      return `<div class="stat"><div class="k">${label}</div><div class="v ${cls}">${value}</div></div>`;
+    }
+    const pct = (v) => (v == null ? ['—', ''] : [`${Math.round(v)}%`, v >= 90 ? 'bad' : v >= 80 ? 'warn' : '']);
+
+    async function refreshStatusPanel() {
+      const pill = document.getElementById('sp-pill');
+      const body = document.getElementById('sp-body');
+      try {
+        const res = await fetch('/statuspanel/api/summary', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const s = await res.json();
+        const [cls, label] = s.stale ? ['', 'stale'] : PILL[s.overall] ?? ['', s.overall];
+        pill.className = `pill ${cls}`;
+        pill.textContent = label;
+        if (!s.generated_at) { body.className = 'meta'; body.textContent = s.error ?? 'No data collected yet.'; return; }
+        const m = s.metrics, t = s.tls, u = s.updates, a = s.alerts;
+        const certs = t.invalid ? [`${t.invalid} bad`, 'bad'] : t.min_days_left == null ? ['—', ''] : [`${Math.floor(t.min_days_left)} d`, t.min_days_left < 14 ? 'warn' : ''];
+        const updates = u.security ? [`${u.security} sec`, 'warn'] : u.reboot_required ? ['reboot', 'warn'] : [String(u.upgradable ?? '—'), ''];
+        const issues = a.top.slice(0, 3).map((x) => `<li><span class="dot ${esc(x.level)}"></span><span class="msg">${esc(x.message)}</span><span class="age">${x.since ? agoSec(x.since) : ''}</span></li>`).join('');
+        const more = a.critical + a.warning - Math.min(3, a.top.length);
+        body.className = '';
+        body.innerHTML = `
+          <div class="meta">${esc(s.host)} · updated ${agoSec(s.last_success)}${s.site_up === false ? ' · <b style="color:var(--bad)">site down</b>' : s.site_up ? ' · site up' : ''}${s.error ? ` · last poll failed: ${esc(s.error)}` : ''}</div>
+          <div class="stats">
+            ${stat('CPU', ...pct(m.cpu_pct))}${stat('Memory', ...pct(m.mem_pct))}${stat('Disk /', ...pct(m.disk_root_pct))}
+            ${stat('Certs', ...certs)}${stat('Updates', ...updates)}
+          </div>
+          ${issues ? `<ul class="issues">${issues}</ul>` : '<div class="meta">No warnings - all checks passing.</div>'}
+          ${more > 0 ? `<div class="meta">+${more} more</div>` : ''}`;
+      } catch (e) {
+        pill.className = 'pill off';
+        pill.textContent = 'unavailable';
+        body.className = 'meta';
+        body.textContent = `StatusPanel not reachable (${e.message}). Is the poller running?`;
+      }
+    }
+
+    refreshStatusPanel();
+    setInterval(refreshStatusPanel, 30000);
+
+    // Service controls for each tile (GET/POST /api/services). serve.mjs runs each service itself:
+    // Stop also disables it (it stays off after a restart of the stack), Start re-enables it.
+    const REFRESH = { tabletpanel: refreshTabletPanel, statuspanel: refreshStatusPanel, mqtt: () => {} };   // front/local/tiles.js may add more
+    const pending = new Set();
+    const STATE = {
+      running: ['on', 'running'], starting: ['wait', 'starting…'], restarting: ['wait', 'restarting…'],
+      stopped: ['off', 'stopped'], external: ['wait', 'running outside supervisor'], error: ['off', 'error'],
+    };
+    const uptime = (s) => (s == null ? '' : s < 3600 ? ` · up ${Math.max(1, Math.round(s / 60))} min` : s < 86400 ? ` · up ${Math.round(s / 3600)} h` : ` · up ${Math.round(s / 86400)} d`);
+
+    function renderControl(el, svc, error) {
+      const busy = pending.has(svc.name) || svc.busy;
+      const [led, label] = STATE[svc.state] ?? ['', svc.state];
+      const buttons = busy
+        ? '<button type="button" disabled>Working…</button>'
+        : svc.enabled
+          ? `${svc.pid ? '<button type="button" data-act="restart">Restart</button>' : ''}<button type="button" data-act="stop">Stop</button>`
+          : '<button type="button" data-act="start">Start</button>';
+      el.innerHTML = `<span class="led ${led}"></span>${label}${svc.state === 'running' ? uptime(svc.uptimeSeconds) : ''}${svc.restarts ? ` · ${svc.restarts} restart${svc.restarts > 1 ? 's' : ''}` : ''}
+        ${buttons}
+        ${error ? `<span class="err">${esc(error)}</span>` : svc.message ? `<span class="note">${esc(svc.message)}</span>` : ''}`;
+      for (const b of el.querySelectorAll('button[data-act]')) b.onclick = () => control(el, svc, b.dataset.act);
+    }
+
+    async function control(el, svc, action) {
+      if (action === 'stop' && !confirm(`Stop ${svc.title}? It stays off, even after a restart, until you start it again.`)) return;
+      pending.add(svc.name);
+      renderControl(el, svc);
+      let error = null;
+      try {
+        const res = await fetch(`/api/services/${encodeURIComponent(svc.name)}/${action}`, { method: 'POST', headers: { 'X-Requested-With': 'fetch' } });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) error = body.message || body.error || `HTTP ${res.status}`;
+        if (body.state) Object.assign(svc, body);
+      } catch (e) {
+        error = e.message;
+      }
+      pending.delete(svc.name);
+      renderControl(el, svc, error);
+      REFRESH[svc.name]?.();
+    }
+
+    async function refreshControls() {
+      try {
+        const res = await fetch('/api/services', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        for (const svc of await res.json()) {
+          const el = document.querySelector(`[data-service="${CSS.escape(svc.name)}"] .svc`);
+          if (el && !pending.has(svc.name)) renderControl(el, svc);
+        }
+      } catch {
+        for (const el of document.querySelectorAll('[data-service] .svc')) el.textContent = '';
+      }
+    }
+
+    refreshControls();
+    setInterval(refreshControls, 15000);
+
+    // Alert banner and broker tile, live from the MQTT broker (/mqtt/bus.js). × hides a warning in
+    // this browser until it changes (a new occurrence or a higher level); it stays on the bus for
+    // every other display. "Show hidden" brings them back.
+    const HIDDEN_KEY = 'alerts.hidden';
+    const loadHidden = () => { try { return JSON.parse(localStorage.getItem(HIDDEN_KEY)) ?? {}; } catch { return {}; } };
+    let hiddenAlerts = loadHidden();   // "source/id" -> "since|level" when hidden
+    const alertStamp = (a) => `${a.since ?? ''}|${a.level}`;
+    function saveHidden() { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenAlerts)); } catch { /* storage unavailable */ } }
+    // An alert's help ("help": what it means and what to do; "link": where the details are), from
+    // its source. Which ones are open survives the banner being redrawn on every update.
+    const openHelp = new Set();
+    function helpHtml(a) {
+      const key = `${a.source}/${a.id}`, body = mqttHelpHtml(a, esc);
+      return body ? `<details class="help" data-key="${esc(key)}"${openHelp.has(key) ? ' open' : ''}><summary>How to fix</summary>${body}</details>` : '';
+    }
+    document.getElementById('alerts').addEventListener('toggle', (e) => {   // toggle doesn't bubble: capture it
+      const key = e.target.dataset?.key;
+      if (key) (e.target.open ? openHelp.add(key) : openHelp.delete(key));
+    }, true);
+
+    function renderBus(st) {
+      const all = mqttAlerts(st, 'warning');
+      const current = new Set(all.map((a) => `${a.source}/${a.id}`));
+      for (const key of Object.keys(hiddenAlerts)) if (!current.has(key)) delete hiddenAlerts[key];   // forget cleared ones
+      const shown = all.filter((a) => hiddenAlerts[`${a.source}/${a.id}`] !== alertStamp(a));
+      const hidden = all.length - shown.length;
+      document.getElementById('alerts').innerHTML = shown.map((a) => `
+        <div class="alert ${esc(a.level)}"><span class="lvl">${esc(a.level)}</span>
+          <span class="msg"><b>${esc(a.title ?? a.source)}</b> ${esc(a.message ?? '')}</span>
+          <span class="age">${esc(mqttSource(a))}${a.since ? ` · ${agoSec(a.since)}` : ''}</span>
+          <button type="button" class="hide" data-hide="${esc(`${a.source}/${a.id}`)}" data-stamp="${esc(alertStamp(a))}" title="Hide here until it changes" aria-label="Hide">×</button>
+          ${helpHtml(a)}</div>`).join('')
+        + (hidden ? `<div class="hidden-note">${hidden} hidden · <button type="button" class="link" data-unhide>show</button></div>` : '');
+      const pill = document.getElementById('mq-pill'), body = document.getElementById('mq-body');
+      pill.className = `pill ${st.connected ? 'on' : 'off'}`;
+      pill.textContent = st.connected ? 'connected' : 'unreachable';
+      if (!st.connected) { body.className = 'meta'; body.textContent = st.error ?? 'Broker not reachable.'; return; }
+      const levels = { critical: 0, warning: 0, info: 0 };
+      for (const a of st.alerts.values()) levels[a.level] = (levels[a.level] ?? 0) + 1;
+      const clients = [...st.clients].sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, c]) => {
+          // A device marked out of service (offline on purpose) is grey, not red.
+          const away = c.state !== 'online' && st.registry.get(name)?.outOfService;
+          return `<span class="${c.state === 'online' ? 'online' : away ? 'away' : ''}" title="${esc(away ? 'out of service' : c.state)}">${esc(name)}</span>`;
+        }).join('');
+      body.className = '';
+      body.innerHTML = `
+        <div class="stats">
+          ${stat('Clients', st.sys['clients/connected'] ?? '—')}${stat('Alerts', st.alerts.size)}
+          ${stat('Warn+', levels.warning + levels.critical, levels.critical ? 'bad' : levels.warning ? 'warn' : '')}
+        </div>
+        ${clients ? `<div class="clients">${clients}</div>` : '<div class="meta">No clients have reported a status yet.</div>'}`;
+    }
+    // IoT devices: Raspberry Pis (agents/pi/pi_health.py) and NodeMCUs (their sketch) report
+    // devices/<name>/health every 30 s and keep status/<name> online. The tile is a one-line-per-
+    // device summary, grouped by kind; /devices/ has the full status and management. A NodeMCU
+    // whose sketch publishes devices/<name>/wifi (nodemcu_nodisp, every 5 s) shows that live.
+    function signalHtml(w) {
+      const pct = Math.max(0, Math.min(100, w.pct ?? 0));
+      const bars = [2, 4, 6, 8, 10].map((px, i) => `<i class="${pct >= (i + 1) * 20 - 10 ? 'on' : ''}" style="height:${px}px"></i>`).join('');
+      return `<span class="sig ${pct >= 50 ? 'good' : pct >= 25 ? 'fair' : 'poor'}" title="${esc(w.ssid ?? '')} · channel ${esc(w.channel ?? '?')}">${bars}</span>`
+        + `${Math.round(w.dbm)} dBm · ${Math.round(pct)}%`;
+    }
+    function deviceLine(st, d) {
+      const h = d.health;
+      const alerts = [...st.alerts.values()].filter((a) => a.source === d.name && a.level !== 'info');
+      const issue = alerts.length ? alerts.map((a) => a.message).join(', ')
+        : h?.throttling?.now?.length ? h.throttling.now.join(', ') : '';
+      const w = st.wifi.get(d.name);
+      const live = w?.dbm != null && Date.now() / 1000 - (w.at ?? w._received) < 60 ? w : null;
+      const ok = d.kind === 'raspberry-pi'
+        ? `${h?.temp_c == null ? '' : `${Math.round(h.temp_c)} °C · `}CPU ${Math.round(h?.cpu_pct ?? 0)}%`
+        : live ? signalHtml(live)
+        : h?.wifi?.dbm != null ? `Wi-Fi ${Math.round(h.wifi.dbm)} dBm` : 'online';
+      // Offline comes first: a device that's off can't confirm its last warnings.
+      const what = !d.online ? esc(d.status === 'offline' ? `offline ${agoSec(d.last)}` : d.status)
+        : issue ? `⚠ ${esc(issue)}` : ok;
+      // Out of service: offline on purpose, so grey rather than red.
+      return `<li class="${d.outOfService ? 'away' : ''}"><span class="led ${d.online ? 'on' : h && !d.outOfService ? 'off' : ''}" title="${esc(d.status)}"></span>
+        <span class="who"><b>${esc(d.name)}</b>${d.entry?.subtitle ? ` <span class="muted">${esc(d.entry.subtitle)}</span>` : ''}</span>
+        <span class="what ${d.online && issue ? 'bad' : ''}">${what}</span></li>`;
+    }
+    function renderDevices(st) {
+      const all = mqttDevices(st);
+      const pill = document.getElementById('dev-pill'), body = document.getElementById('dev-body');
+      if (!st.connected) { pill.className = 'pill off'; pill.textContent = 'unavailable'; body.className = 'meta'; body.textContent = st.error ?? 'MQTT broker not reachable.'; return; }
+      if (!all.length) {
+        pill.className = 'pill'; pill.textContent = 'none';
+        body.className = 'meta';
+        body.textContent = 'No devices yet. Open the page to add one.';
+        return;
+      }
+      const sum = onlineSummary(all);   // out-of-service devices don't count against it
+      pill.className = `pill ${sum.cls}`;
+      pill.textContent = sum.text;
+      body.className = '';
+      body.innerHTML = Object.entries(DEVICE_KINDS).map(([kind, k]) => {
+        const list = all.filter((d) => d.kind === kind);
+        return list.length ? `<div class="dev-group">${esc(k.title)}</div><ul class="pi-list">${list.map((d) => deviceLine(st, d)).join('')}</ul>` : '';
+      }).join('');
+    }
+
+    document.getElementById('alerts').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (b?.dataset.hide) hiddenAlerts[b.dataset.hide] = b.dataset.stamp;
+      else if (b?.hasAttribute('data-unhide')) hiddenAlerts = {};
+      else return;
+      saveHidden();
+      renderBus(busState);
+    });
+
+    const busState = mqttBus((st) => { renderBus(st); renderSent(st); renderDevices(st); });
+    setInterval(() => { renderBus(busState); renderDevices(busState); }, 30000);   // keep ages and staleness current
+
+    // Tile order: drag a tile by its grip, or focus the grip and use the arrow keys. The order is
+    // remembered in this browser only; tiles added later go at the end.
+    const grid = document.querySelector('main');
+    const ORDER_KEY = 'tiles.order';
+    const loadOrder = () => { try { return JSON.parse(localStorage.getItem(ORDER_KEY)) ?? []; } catch { return []; } };
+    function saveOrder() {
+      try { localStorage.setItem(ORDER_KEY, JSON.stringify([...grid.children].map((t) => t.id))); } catch { /* storage unavailable */ }
+      document.getElementById('reset-order').hidden = false;
+    }
+    const original = [...grid.children];
+    const saved = loadOrder();
+    if (saved.length) {
+      const rank = (t) => (saved.includes(t.id) ? saved.indexOf(t.id) : saved.length + original.indexOf(t));
+      for (const t of [...original].sort((a, b) => rank(a) - rank(b))) grid.appendChild(t);
+      document.getElementById('reset-order').hidden = false;
+    }
+    document.getElementById('reset-order').onclick = (e) => {
+      try { localStorage.removeItem(ORDER_KEY); } catch { /* storage unavailable */ }
+      for (const t of original) grid.appendChild(t);
+      e.target.hidden = true;
+    };
+
+    let dragging = null;
+    for (const tile of grid.querySelectorAll(':scope > .tile')) {
+      const grip = document.createElement('button');
+      Object.assign(grip, { type: 'button', className: 'grip', textContent: '⋯', title: 'Drag to move (or arrow keys)' });
+      grip.setAttribute('aria-label', `Move ${tile.querySelector('h2')?.firstChild?.textContent.trim() ?? 'tile'}`);
+      tile.prepend(grip);
+      grip.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        dragging = tile;
+        grip.setPointerCapture(e.pointerId);
+        tile.classList.add('dragging');
+        document.body.classList.add('dragging');
+      });
+      grip.addEventListener('pointermove', (e) => {
+        if (dragging !== tile) return;
+        const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('main > .tile');
+        if (!over || over === tile) return;
+        const tiles = [...grid.children];
+        grid.insertBefore(tile, tiles.indexOf(tile) < tiles.indexOf(over) ? over.nextSibling : over);
+      });
+      const drop = () => {
+        if (dragging !== tile) return;
+        dragging = null;
+        tile.classList.remove('dragging');
+        document.body.classList.remove('dragging');
+        saveOrder();
+      };
+      grip.addEventListener('pointerup', drop);
+      grip.addEventListener('pointercancel', drop);
+      grip.addEventListener('keydown', (e) => {
+        const back = e.key === 'ArrowLeft' || e.key === 'ArrowUp', fwd = e.key === 'ArrowRight' || e.key === 'ArrowDown';
+        if (!back && !fwd) return;
+        e.preventDefault();
+        if (back && tile.previousElementSibling) grid.insertBefore(tile, tile.previousElementSibling);
+        else if (fwd && tile.nextElementSibling) grid.insertBefore(tile, tile.nextElementSibling.nextSibling);
+        grip.focus();
+        saveOrder();
+      });
+    }
+
+    // Send alert: POST /api/alerts publishes alerts/manual/<id>; Clear is DELETE /api/alerts/<id>.
+    const PRESETS = [
+      { label: 'Dinner is ready', body: { title: 'Dinner is ready', level: 'info', durationSeconds: 300 } },
+      { label: 'Doorbell', body: { title: 'Someone is at the door', level: 'warning', durationSeconds: 60, id: 'doorbell' } },
+      { label: 'Leaving soon', body: { title: 'Leaving in 10 minutes', level: 'info', durationSeconds: 600 } },
+      { label: 'Severe weather', body: { title: 'Severe weather', message: 'Take shelter now', level: 'critical', durationSeconds: 0 } },
+    ];
+    async function alertApi(method, path, body) {
+      const res = await fetch(`/api/alerts${path}`, {
+        method, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: body && JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      return data;
+    }
+    function sendResult(text, isError) {
+      const el = document.getElementById('send-result');
+      el.textContent = text;
+      el.className = `result${isError ? ' err' : ''}`;
+    }
+    async function sendAlert(body) {
+      if (body.level === 'critical' && !confirm('A critical alert takes over every display until it is cleared. Send it?')) return;
+      try {
+        const r = await alertApi('POST', '', body);
+        sendResult(`Sent (${r.topic}).`);
+        return true;
+      } catch (e) { sendResult(`Not sent: ${e.message}`, true); }
+    }
+    function renderSent(st) {
+      const mine = mqttAlerts(st).filter((a) => a.source === 'manual');
+      document.getElementById('sent').innerHTML = mine.map((a) => `
+        <li><span class="dot ${esc(a.level)}" style="flex:none;width:8px;height:8px;border-radius:50%;background:${a.level === 'critical' ? 'var(--bad)' : a.level === 'warning' ? 'var(--warn)' : 'var(--muted)'}"></span>
+          <span class="msg"><b>${esc(a.title ?? '')}</b> ${esc(a.message ?? '')}</span>
+          <span class="meta">${a.expires ? `until ${new Date(a.expires * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'until cleared'}</span>
+          <button type="button" data-clear="${esc(a.id)}">Clear</button></li>`).join('');
+    }
+    document.getElementById('presets').innerHTML = PRESETS.map((p, i) => `<button type="button" data-preset="${i}">${esc(p.label)}</button>`).join('');
+    document.getElementById('send').addEventListener('click', async (e) => {
+      const b = e.target.closest('button');
+      if (b?.dataset.preset) sendAlert(PRESETS[b.dataset.preset].body);
+      else if (b?.dataset.clear) {
+        try { await alertApi('DELETE', `/${encodeURIComponent(b.dataset.clear)}`); sendResult('Cleared.'); }
+        catch (err) { sendResult(`Not cleared: ${err.message}`, true); }
+      }
+    });
+    document.getElementById('alert-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.target.elements;
+      const body = { title: f.title.value, message: f.message.value, level: f.level.value };
+      if (f.duration.value !== '') body.durationSeconds = Number(f.duration.value);
+      if (await sendAlert(body)) f.title.value = f.message.value = '';
+    });
+  </script>
+</body>
+</html>

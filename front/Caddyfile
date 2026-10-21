@@ -1,0 +1,99 @@
+{
+    admin off
+    auto_https off
+}
+
+# Front door for the local services. Each service runs on its own and is only
+# routed here; this server hosts nothing but the tiles page in ./public.
+#
+# Reachable from the local network and Tailscale. Only clients on private
+# address ranges (LAN, this machine) or the Tailscale CGNAT range
+# (100.64.0.0/10) are served; anyone else is disconnected. Tailscale IPv6
+# (fd7a:115c:a1e0::/48) is already covered by private_ranges.
+http://:80 {
+    route {
+        @outside not remote_ip private_ranges 100.64.0.0/10
+        abort @outside
+
+        # This server's own pages and scripts: browsers check for a newer version every time
+        # (a cheap 304 when unchanged), so an update never leaves a page with an old shared script.
+        @own path / /mqtt/* /devices/* /vendor/* /local/*
+        header @own Cache-Control "no-cache"
+
+        redir /statuspanel /statuspanel/ 308
+        redir /tabletpanel /tabletpanel/ 308
+        redir /mqtt /mqtt/ 308
+        redir /devices /devices/ 308
+        # The page used to be Raspberry Pis only, at /pis/.
+        redir /pis* /devices/ 308
+
+        # IoT devices status and management page (./public/devices/; its API is /api/devices on serve.mjs).
+        handle /devices/* {
+            root * ./public
+            file_server
+        }
+
+        # MQTT over WebSockets for the pages (anonymous and read-only, see ../mqtt/acl.conf).
+        handle /mqtt/ws {
+            reverse_proxy 127.0.0.1:9001
+        }
+
+        # MQTT details page (this project's ./public/mqtt/).
+        handle /mqtt/* {
+            root * ./public
+            file_server
+        }
+
+        # The MQTT client library for those pages, from ../node_modules (npm install).
+        handle /vendor/mqtt.min.js {
+            root * ../node_modules/mqtt/dist
+            rewrite * /mqtt.min.js
+            file_server
+        }
+
+        # StatusPanel: dashboard and REST API served by ../linuxserver/local/poller.mjs.
+        handle_path /statuspanel/* {
+            reverse_proxy 127.0.0.1:3003 {
+                header_down Location "^/([^/].*)?$" "/statuspanel/$1"
+            }
+        }
+
+        # TabletPanel control server (../tebletpanel/server). It listens on all interfaces
+        # at 8787 because the tablets connect to it directly; this route adds it to the front page.
+        # reverse_proxy passes the WebSocket upgrade at /tabletpanel/ws through unchanged.
+        handle_path /tabletpanel/* {
+            reverse_proxy 127.0.0.1:8787 {
+                header_down Location "^/([^/].*)?$" "/tabletpanel/$1"
+            }
+        }
+
+        # This PC's own routes, kept out of git: every front/local/*.caddy (none is fine).
+        import local/*.caddy
+
+        # This PC's own tiles for the tiles page (front/local/tiles.js); an empty script without one.
+        handle /local/tiles.js {
+            root * ./local
+            rewrite * /tiles.js
+            @none not file
+            header @none Content-Type "text/javascript; charset=utf-8"
+            respond @none "" 200
+            file_server
+        }
+
+        # Start/stop API for the services in ../services.json, served by serve.mjs.
+        handle /api/* {
+            reverse_proxy 127.0.0.1:3080
+        }
+
+        # Tiles page with a live summary of each service.
+        handle / {
+            root * ./public
+            rewrite * /index.html
+            file_server
+        }
+
+        handle {
+            respond "Not found" 404
+        }
+    }
+}

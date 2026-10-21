@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IoT Devices</title>
+  <style>
+    :root {
+      --bg: #0f1419; --card: #18202a; --inner: #0f1419; --line: #2a3542;
+      --text: #e6edf3; --muted: #8b98a5; --accent: #4ea8ff;
+      --ok: #22c55e; --bad: #ef4444; --warn: #f59e0b;
+      color-scheme: dark;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #f3f5f8; --card: #fff; --inner: #f3f5f8; --line: #dde3ea; --text: #17202a; --muted: #5c6b7a; --accent: #1d6fd6; color-scheme: light; }
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }   /* hidden wins over .row's display: flex */
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    header { padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--card); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    header h1 { font-size: 19px; margin: 0; }
+    header a { color: var(--accent); text-decoration: none; font-size: 14px; }
+    main { padding: 16px; max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    .group > h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 4px 0 10px; display: flex; gap: 10px; align-items: center; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+    @media (max-width: 420px) { .grid { grid-template-columns: 1fr; } }
+    section, .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+    section > h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+    .pill { font-size: 12px; padding: 2px 10px; border-radius: 99px; background: var(--line); color: var(--muted); white-space: nowrap; text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .pill.on { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+    .pill.off { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+    .pill.warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+    .muted { color: var(--muted); }
+    .small { font-size: 13px; }
+    code, pre { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+    pre { background: var(--inner); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 0; }
+    .card { display: flex; flex-direction: column; gap: 10px; }
+    .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .head .title { min-width: 0; }
+    .head .name { font-size: 17px; font-weight: 600; }
+    .head .sub { color: var(--muted); font-size: 14px; }
+    .bars { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .bar { background: var(--inner); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+    .bar .k { font-size: 12px; color: var(--muted); }
+    .bar .v { font-size: 17px; font-weight: 600; }
+    .bar .track { height: 4px; border-radius: 2px; background: var(--line); margin-top: 4px; overflow: hidden; }
+    .bar .fill { height: 100%; background: var(--ok); }
+    .bar.warn .fill { background: var(--warn); } .bar.bad .fill { background: var(--bad); }
+    .bar.warn .v { color: var(--warn); } .bar.bad .v { color: var(--bad); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    td { padding: 3px 6px 3px 0; vertical-align: top; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+    td:first-child { color: var(--muted); white-space: nowrap; width: 1%; padding-right: 12px; }
+    td.note { white-space: normal; padding-top: 8px; }
+    .flag { font-size: 13px; color: var(--warn); } .flag.bad { color: var(--bad); }
+    .alerts { list-style: none; margin: 0; padding: 0; font-size: 13px; display: flex; flex-direction: column; gap: 3px; }
+    .alerts .warning { color: var(--warn); } .alerts .critical { color: var(--bad); }
+    .alerts details.help { color: var(--text); margin: 2px 0 6px 16px; }
+    .alerts details.help > summary { cursor: pointer; color: var(--muted); width: max-content; }
+    .alerts details.help p, .alerts details.help ol { margin: 4px 0; line-height: 1.5; }
+    .alerts details.help ol { padding-left: 20px; }
+    .alerts details.help code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--inner); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; user-select: all; }
+    .alerts details.help a { color: var(--accent); }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+    button { font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); background: var(--inner); color: var(--text); }
+    button:hover:not(:disabled) { border-color: var(--accent); }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.danger { color: var(--bad); }
+    form { display: flex; flex-direction: column; gap: 8px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .row > label { flex: 1 1 160px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+    input[type=text], select { font: inherit; font-size: 14px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--inner); color: var(--text); width: 100%; }
+    dialog#editor { border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); padding: 18px 20px; width: min(440px, calc(100vw - 32px)); }
+    dialog#editor::backdrop { background: rgb(0 0 0 / .45); }
+    dialog#editor h2 { font-size: 16px; margin: 0 0 4px; }
+    dialog#editor form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+    dialog#editor .row.end { justify-content: flex-end; margin-top: 4px; }
+    .result.err { color: var(--bad); }
+    .login { border: 1px solid var(--warn); border-radius: 8px; padding: 8px 10px; }
+    details > summary { cursor: pointer; }
+    .empty { color: var(--muted); padding: 4px 0 8px; font-size: 14px; }
+    .oos { color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, transparent); border-radius: 8px; padding: 6px 10px; }
+    .settings label.inline { display: flex; flex-direction: row; align-items: center; gap: 8px; color: var(--muted); flex: 0 1 auto; }
+    .settings select { width: auto; font-size: 13px; padding: 3px 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← Local services</a>
+    <h1>IoT Devices</h1>
+    <span class="pill" id="pill">connecting…</span>
+    <span class="muted small" id="job"></span>
+  </header>
+  <main>
+    <div id="groups"></div>
+
+    <section>
+      <h2>Add a device</h2>
+      <form id="add">
+        <div class="row">
+          <label>Group<select name="kind">
+            <option value="raspberry-pi">Raspberry Pi</option>
+            <option value="nodemcu">NodeMCU (ESP8266)</option>
+            <option value="other">Other</option>
+          </select></label>
+          <label>Name (its MQTT login and topics)<input type="text" name="name" placeholder="e.g. pi3b-3 or node-2" required pattern="[A-Za-z0-9][\w-]{0,31}"></label>
+          <label>Subtitle<input type="text" name="subtitle" placeholder="e.g. Wifi Scanner" maxlength="80"></label>
+          <label data-for="raspberry-pi">SSH host (blank = the name)<input type="text" name="sshHost" placeholder="e.g. pi3b-3 or pi@192.168.1.50"></label>
+        </div>
+        <div class="row" data-for="raspberry-pi">
+          <label style="flex:0 0 auto;flex-direction:row;gap:6px;align-items:center"><input type="checkbox" name="install" checked> Install the health agent now</label>
+        </div>
+        <div class="small muted" data-for="raspberry-pi">Installing uses this PC's SSH login to the Pi (a key, no password prompt) and needs Python 3 there; no sudo. It creates the Pi's MQTT login, which restarts the broker for a few seconds.</div>
+        <div class="small muted" data-for="firmware" hidden>Creates the device's MQTT login (restarting the broker for a few seconds) and shows the settings to flash into its sketch. The device reports itself on <code>status/&lt;name&gt;</code> and <code>devices/&lt;name&gt;/health</code> (with <code>"kind"</code>). A device that already reports shows up above without adding it.</div>
+        <div class="row"><button type="submit" class="primary">Add</button></div>
+        <div class="result small" id="add-result"></div>
+      </form>
+    </section>
+  </main>
+  <dialog id="editor" aria-labelledby="edit-title">
+    <form id="edit-form" method="dialog">
+      <h2 id="edit-title">Edit</h2>
+      <label>Subtitle<input type="text" name="subtitle" maxlength="80" placeholder="e.g. Wifi Scanner" autocomplete="off"></label>
+      <label data-for-pi>SSH host<input type="text" name="sshHost" placeholder="e.g. pi3b-1 or pi@192.168.1.50" autocomplete="off"></label>
+      <label data-for-oos>Out-of-service note<input type="text" name="oosNote" maxlength="120" autocomplete="off"></label>
+      <div class="result small err" id="edit-error"></div>
+      <div class="row end"><button type="submit" value="cancel" formnovalidate>Cancel</button><button type="submit" value="save" class="primary">Save</button></div>
+    </form>
+  </dialog>
+  <script src="/vendor/mqtt.min.js"></script>
+  <script src="/mqtt/bus.js?v=6"></script>
+  <script>
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const ago = (sec) => {
+      const s = Math.round(Date.now() / 1000 - sec);
+      return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`;
+    };
+    const dur = (s) => (s < 3600 ? `${Math.round(s / 60)} min` : s < 172800 ? `${Math.round(s / 3600)} h` : `${(s / 86400).toFixed(1)} days`);
+    const when = (sec) => new Date(sec * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const bytes = (b) => (b == null ? '—' : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(b >= 1e7 ? 0 : 1)} MB` : `${Math.round(b / 1024)} KB`);
+    let broker = { host: location.hostname, port: 1883 };
+
+    async function api(method, path, body) {
+      const res = await fetch(`/api/devices${path}`, {
+        method, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: body && JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { const e = new Error(data.message || data.error || `HTTP ${res.status}`); e.output = data.output; throw e; }
+      return data;
+    }
+
+    function bar(label, value, unit, warn, bad, max = 100) {
+      if (value == null) return `<div class="bar"><div class="k">${label}</div><div class="v">—</div></div>`;
+      const cls = value >= bad ? 'bad' : value >= warn ? 'warn' : '';
+      return `<div class="bar ${cls}"><div class="k">${label}</div><div class="v">${Math.round(value)}${unit}</div>
+        <div class="track"><div class="fill" style="width:${Math.min(100, (value / max) * 100)}%"></div></div></div>`;
+    }
+
+    // The Pi agent's screens: framebuffers (e.g. an SPI LCD) and HDMI/DSI ports.
+    function screens(list) {
+      if (!list.length) return '<span class="muted">none</span>';
+      return list.map((s) => (s.kind === 'framebuffer'
+        ? `${esc(s.driver?.replace(/^fb_/, '') ?? s.id)} <b>${s.width}×${s.height}</b>${s.bpp ? ` · ${s.bpp}-bit` : ''}${s.rotate ? ` · rotated ${s.rotate}°` : ''} <span class="muted">(${esc(s.id)})</span>`
+        : `${esc(s.id)} ${s.status === 'connected' ? `<b>${esc(s.mode ?? 'connected')}</b>` : `<span class="muted">${esc(s.status ?? 'unknown')}</span>`}`)).join('<br>');
+    }
+
+    // Signal strength: low is bad, so the colours run the other way.
+    function signalBar(pct) {
+      if (pct == null) return bar('Wi-Fi signal', null);
+      const cls = pct < 30 ? 'bad' : pct < 50 ? 'warn' : '';
+      return `<div class="bar ${cls}"><div class="k">Wi-Fi signal</div><div class="v">${Math.round(pct)}%</div>
+        <div class="track"><div class="fill" style="width:${Math.min(100, pct)}%"></div></div></div>`;
+    }
+
+    // ESP8266 Wi-Fi: RSSI in dBm, and the sketch's 0-100 % estimate.
+    const wifiText = (w) => (w ? `${esc(w.ssid ?? '')} · ch ${esc(w.channel ?? '?')} · ${Math.round(w.dbm)} dBm${w.pct != null ? ` (${w.pct}%)` : ''}` : '—');
+
+    // A Pi's package updates (agent 1.6+: null until its first check, ~1 min after it starts).
+    const updatesText = (u) => {
+      if (u === null) return '<span class="muted">checking…</span>';
+      const waiting = u.total ? `${u.total} waiting${u.security ? ` · <span class="flag">${u.security} security</span>` : ''}` : 'up to date';
+      return [waiting, u.reboot ? '<span class="flag">reboot needed</span>' : '',
+        u.lists_at ? `<span class="muted">lists refreshed ${ago(u.lists_at)}</span>` : '',
+        u.error ? `<span class="flag bad">check failed: ${esc(u.error)}</span>` : ''].filter(Boolean).join(' · ');
+    };
+
+    // Per kind: the body of a card (when the device has reported) and whether it takes an SSH agent.
+    const BODY = {
+      'raspberry-pi': (h) => {
+        const th = h.throttling ?? {};
+        return {
+          top: `<div class="muted small">${esc(h.model ?? 'Raspberry Pi')} · ${esc(h.os ?? '')} · kernel ${esc(h.kernel ?? '')} · agent ${esc(h.agent ?? '')}</div>
+            <div class="bars">${bar('Temperature', h.temp_c, ' °C', 70, 80, 90)}${bar('CPU', h.cpu_pct, '%', 80, 95)}${bar('Memory', h.mem_pct, '%', 80, 90)}${bar('Disk', h.disk_pct, '%', 80, 90)}</div>
+            ${(th.now ?? []).map((f) => `<div class="flag bad">⚠ ${esc(f)} now</div>`).join('')}
+            ${(th.since_boot ?? []).filter((f) => !(th.now ?? []).includes(f)).map((f) => `<div class="flag">${esc(f)} since boot</div>`).join('')}`,
+          rows: [
+            ['Uptime', `${dur(h.uptime_s)} · load ${(h.load ?? []).join(' / ')} on ${esc(h.cpus)} CPUs`],
+            ['Network', `${esc(h.ip ?? '—')}${h.wifi ? ` · ${esc(h.wifi.iface)} ${Math.round(h.wifi.dbm)} dBm (link ${Math.round(h.wifi.link)}/70)` : ''}`],
+            ['Memory, disk', `${bytes(h.mem_total)} RAM · ${bytes(h.disk_total)} disk`],
+            ['Throttling', `${esc(th.raw ?? 'unknown')}${th.raw === '0x0' ? ' (none)' : ''}`],
+            ...(h.updates !== undefined ? [['Updates', updatesText(h.updates)]] : []),
+            ...(h.screens ? [['Screens', screens(h.screens)]] : []),
+          ],
+        };
+      },
+      nodemcu: (h) => ({
+        top: `<div class="muted small">${esc(h.model ?? 'NodeMCU')} · chip ${esc(h.chip_id ?? '?')} · core ${esc(h.core ?? '?')} · SDK ${esc(h.sdk ?? '?')} · sketch ${esc(h.agent ?? '?')}</div>
+          <div class="bars">${signalBar(h.wifi?.pct)}${bar('Heap fragmentation', h.heap_frag_pct, '%', 30, 50)}</div>`,
+        rows: [
+          ['Uptime', `${dur(h.uptime_s ?? 0)} · last reset: ${esc(h.reset_reason ?? '?')}`],
+          ['Network', `${esc(h.ip ?? '—')} · ${wifiText(h.wifi)}`],
+          ['Memory', `${bytes(h.heap_free)} free heap${h.heap_frag_pct != null ? ` · ${h.heap_frag_pct}% fragmented` : ''} · CPU ${esc(h.cpu_mhz ?? '?')} MHz`],
+          ['Flash', `${bytes(h.flash_size)} flash · sketch ${bytes(h.sketch_size)}`],
+          ['Display', h.display ? esc(h.display) : '<span class="muted">none</span>'],
+          ...(h.at ? [] : [['Clock', '<span class="muted">not set yet (waiting for NTP)</span>']]),
+        ],
+      }),
+      other: (h) => ({
+        top: `<div class="muted small">${esc(h.model ?? h.kind ?? 'Device')}</div>`,
+        rows: Object.entries(h).filter(([k]) => !['kind', 'at', '_received', 'model'].includes(k))
+          .map(([k, v]) => [esc(k), `<code>${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</code>`]),
+      }),
+    };
+
+    // One card per device, updated in place so an open editor and the last action's output survive updates.
+    const groupsEl = document.getElementById('groups');
+    // Which "How to fix" explanations are open, kept across the cards being redrawn.
+    const openHelp = new Set();
+    groupsEl.addEventListener('toggle', (e) => {   // toggle doesn't bubble: capture it
+      const key = e.target.dataset?.key;
+      if (key) (e.target.open ? openHelp.add(key) : openHelp.delete(key));
+    }, true);
+    const busy = new Set();   // names with a request in flight from this page
+    let serverJob = null;
+
+    // The page's sections, in order. Tablets come from TabletPanel's API (they don't use MQTT).
+    const GROUPS = {
+      'raspberry-pi': { ...DEVICE_KINDS['raspberry-pi'], empty: 'No Raspberry Pis yet. Add one below.' },
+      nodemcu: { ...DEVICE_KINDS.nodemcu, empty: 'None yet. Add one below, or flash a sketch that reports devices/<name>/health with "kind": "nodemcu".' },
+      tablet: { title: 'Tablets', empty: 'No tablet has connected to TabletPanel yet.' },
+      other: { ...DEVICE_KINDS.other, empty: '' },
+    };
+    let tablets = [];        // TabletPanel's devices (GET /tabletpanel/api/state)
+    let items = [];          // what the page shows now: MQTT devices and tablets
+
+    // A tablet's registry name is tablet-<start of its id>; the entry keeps the whole deviceId.
+    function tabletItems(st) {
+      const entries = [...st.registry.values()].filter((e) => e.kind === 'tablet');
+      const list = tablets.map((t) => {
+        const entry = entries.find((e) => e.deviceId === t.id) ?? null;
+        const outOfService = !!entry?.outOfService && !t.connected;
+        return { name: entry?.name ?? `tablet-${t.id.slice(0, 8)}`, kind: 'tablet', entry, tablet: t, health: null, online: !!t.connected,
+          outOfService, status: t.connected ? 'online' : outOfService ? 'out of service' : 'offline', last: Date.parse(t.lastSeen) / 1000 };
+      });
+      for (const e of entries) {
+        if (!tablets.some((t) => t.id === e.deviceId)) {
+          list.push({ name: e.name, kind: 'tablet', entry: e, tablet: null, health: null, online: false,
+            outOfService: !!e.outOfService, status: e.outOfService ? 'out of service' : 'not seen by TabletPanel', last: null });
+        }
+      }
+      return list.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    function group(kind) {
+      let g = groupsEl.querySelector(`[data-kind="${kind}"]`);
+      if (!g) {
+        g = document.createElement('div');
+        g.className = 'group';
+        g.dataset.kind = kind;
+        g.innerHTML = `<h2>${esc(GROUPS[kind].title)} <span class="pill"></span></h2><div class="grid"></div><div class="empty" hidden></div>`;
+        groupsEl.appendChild(g);
+      }
+      return g;
+    }
+
+    // A device's card, created once and then updated in place. It is only moved when its position
+    // changes: moving an element in the page takes the keyboard focus (or an open selector) away
+    // from anything inside it, and updates arrive several times a second.
+    function card(g, name, index) {
+      let el = groupsEl.querySelector(`.card[data-name="${CSS.escape(name)}"]`);
+      if (!el) {
+        el = document.createElement('article');
+        el.className = 'card';
+        el.dataset.name = name;
+        // The settings row is built once: re-rendering it would close an open selector.
+        el.innerHTML = `<div class="head"></div><div class="body"></div>
+          <div class="settings row small" hidden><label class="inline">Show alerts on its display
+            <select data-alerts>${ALERT_SETTINGS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label>
+            <span class="muted hint"></span></div>
+          <div class="actions"></div><div class="out"></div>`;
+      }
+      const grid = g.querySelector('.grid');
+      if (grid.children[index] !== el) grid.insertBefore(el, grid.children[index] ?? null);
+      return el;
+    }
+
+    function render(st) {
+      const all = items = [...mqttDevices(st), ...tabletItems(st)];
+      const sum = onlineSummary(all);   // out-of-service devices don't count against it
+      const pill = document.getElementById('pill');
+      pill.className = `pill ${!st.connected ? 'off' : sum.cls}`;
+      pill.textContent = st.connected ? sum.text : 'MQTT broker not reachable';
+      document.getElementById('job').textContent = serverJob ? `${serverJob.action} ${serverJob.name}…` : '';
+
+      const names = new Set(all.map((d) => d.name));
+      for (const el of [...groupsEl.querySelectorAll('.card')]) if (!names.has(el.dataset.name)) el.remove();
+      for (const kind of Object.keys(GROUPS)) {
+        const list = all.filter((d) => d.kind === kind);
+        if (kind === 'other' && !list.length) { groupsEl.querySelector('[data-kind="other"]')?.remove(); continue; }
+        const g = group(kind);
+        const gs = onlineSummary(list);
+        const gp = g.querySelector('h2 .pill');
+        gp.className = `pill ${!list.length ? '' : gs.cls}`;
+        gp.textContent = list.length ? gs.text : 'none';
+        const empty = g.querySelector('.empty');
+        empty.hidden = list.length > 0;
+        empty.textContent = GROUPS[kind].empty;
+        list.forEach((d, i) => {
+          const el = card(g, d.name, i);
+          if (d.kind === 'tablet') renderTablet(el, d); else renderCard(el, d, st);
+          renderSettings(el, d, st);
+        });
+      }
+    }
+
+    // "Show alerts on its display", for devices that have one. The device applies it from its
+    // registry entry (pi_display, TabletPanel for its tablets, a sketch that reads it).
+    function renderSettings(el, d, st) {
+      const row = el.querySelector('.settings'), sel = row.querySelector('select');
+      const h = d.health;
+      const display = d.kind === 'tablet'
+        || (d.kind === 'raspberry-pi' && (st.topics.has(`devices/${d.name}/display`) || (h?.screens ?? []).some((s) => s.kind === 'framebuffer' || s.status === 'connected')))
+        || (d.kind === 'nodemcu' && !!h?.display);
+      row.hidden = !display;
+      if (document.activeElement !== sel && !busy.has(d.name)) sel.value = d.entry?.alerts ?? '';
+      row.querySelector('.hint').textContent = d.kind === 'raspberry-pi' && !st.topics.has(`devices/${d.name}/display`)
+        ? 'No display app on this Pi applies it yet.'
+        : d.kind === 'nodemcu' ? 'Applied by a sketch that reads its registry entry.' : '';
+    }
+
+    function renderTablet(el, d) {
+      const t = d.tablet, e = d.entry, s = t?.status ?? {};
+      el.querySelector('.head').innerHTML = `
+        <div class="title"><div class="name">${esc(t?.name ?? e?.subtitle ?? d.name)}</div>
+          <div class="sub">${e?.subtitle && e.subtitle !== t?.name ? esc(e.subtitle) : `<span class="muted">${esc(d.name)}${e ? '' : ' · not registered'}</span>`}</div></div>
+        <span class="pill ${d.online ? 'on' : d.outOfService || !t ? 'warn' : 'off'}">${d.online ? 'online' : d.outOfService ? 'out of service' : t ? `offline · ${ago(d.last)}` : esc(d.status)}</span>`;
+      const oos = e?.outOfService;
+      const notice = oos ? `<div class="oos small">${d.online ? 'Marked out of service, but it is online again: Return to service when it is back for good.' : `Out of service since ${esc(new Date(oos.since).toLocaleDateString())}`}${oos.note ? `: ${esc(oos.note)}` : ''}</div>` : '';
+      el.querySelector('.body').innerHTML = notice + (!t ? (oos ? '' : '<div class="muted small">TabletPanel doesn\'t know this tablet (it hasn\'t connected since TabletPanel started).</div>') : `
+        <div class="muted small">${esc(t.model ?? 'Tablet')} · TabletPanel app ${esc(t.appVersion ?? '?')}</div>
+        <table>
+          <tr><td>Last seen</td><td>${d.online ? 'connected now' : `${ago(d.last)} <span class="muted">(${when(d.last)})</span>`}</td></tr>
+          <tr><td>Network</td><td>${esc(t.address ?? '—')}</td></tr>
+          <tr><td>Showing</td><td>${esc(s.focus ?? '—')}${s.outlook ? ` · ${esc(s.outlook)}` : ''}</td></tr>
+          <tr><td>Weather</td><td>${s.temperature != null ? `${Math.round(s.temperature)}° ${esc(s.condition ?? '')}` : '—'}${s.place ? ` · ${esc(s.place)}` : ''}</td></tr>
+          <tr><td>Battery</td><td>${s.battery != null ? `${s.battery}%${s.charging ? ', charging' : ''}` : '—'}</td></tr>
+          <tr><td>Id</td><td class="small"><code>${esc(t.id)}</code></td></tr>
+        </table>`);
+      const working = busy.has(d.name);
+      el.querySelector('.actions').innerHTML = working ? '<button disabled>Working…</button>' : `
+        ${t ? `<button data-act="identify-tablet"${d.online ? '' : ' disabled title="Not connected"'}>Identify</button>` : ''}
+        ${e ? `<button data-act="edit">Edit</button>${e.outOfService ? '<button data-act="in-service">Return to service</button>' : '<button data-act="out-of-service">Out of service</button>'}<button data-act="forget" class="danger">Forget</button>` : '<button data-act="register">Add to registry</button>'}`;
+    }
+
+    function renderCard(el, d, st) {
+      const h = d.health, e = d.entry;
+      el.querySelector('.head').innerHTML = `
+        <div class="title"><div class="name">${esc(d.name)}</div>
+          <div class="sub">${e?.subtitle ? esc(e.subtitle) : e ? '<span class="muted">No subtitle</span>' : 'Not registered: it reports, but the hub has no entry for it'}</div></div>
+        <span class="pill ${d.online ? 'on' : d.outOfService || !h ? 'warn' : 'off'}">${d.online ? 'online' : d.outOfService ? 'out of service' : h ? `offline · ${ago(d.last)}` : 'never reported'}</span>`;
+      // Taken offline on purpose: a yellow notice instead of a problem.
+      const oos = e?.outOfService;
+      const notice = oos ? `<div class="oos small">${d.online ? 'Marked out of service, but it is online again: Return to service when it is back for good.' : `Out of service since ${esc(new Date(oos.since).toLocaleDateString())}`}${oos.note ? `: ${esc(oos.note)}` : ''}</div>` : '';
+
+      const alerts = [...st.alerts.values()].filter((a) => a.source === d.name);
+      const others = [...st.topics].filter(([t]) => t.startsWith(`devices/${d.name}/`) && t !== `devices/${d.name}/health`);
+      const hint = d.kind === 'raspberry-pi'
+        ? `No health report yet. Install the agent (below), or check that <code>${esc(e?.sshHost ?? d.name)}</code> is reachable.`
+        : `No health report yet. Flash the sketch with this device's MQTT login (New password shows one), and check it connects to <code>${esc(broker.host)}:${broker.port}</code> as <code>${esc(d.name)}</code>.`;
+      if (!h) {
+        el.querySelector('.body').innerHTML = `${notice}${oos ? '' : `<div class="muted small">${hint}</div>`}`;
+      } else {
+        const b = BODY[d.kind](h);
+        // Offline: everything below is its last report, which it can no longer confirm.
+        const stale = !d.online ? `<div class="small muted">Offline since about ${esc(when(d.last))}: the readings below are from its last report.</div>` : '';
+        el.querySelector('.body').innerHTML = `${notice}${stale}${b.top}
+          ${alerts.length ? `<ul class="alerts">${alerts.map((a) => {
+            const key = `${a.source}/${a.id}`, help = mqttHelpHtml(a, esc);
+            return `<li class="${esc(a.level)}">⚠ ${esc(a.title ?? '')}: ${esc(a.message ?? '')}${d.online ? '' : ' <span class="muted">(at its last report)</span>'}
+              ${help ? `<details class="help" data-key="${esc(key)}"${openHelp.has(key) ? ' open' : ''}><summary>How to fix</summary>${help}</details>` : ''}</li>`;
+          }).join('')}</ul>` : ''}
+          <table>
+            <tr><td>Last report</td><td>${ago(d.last)} <span class="muted">(${when(d.last)})</span></td></tr>
+            ${b.rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}
+            ${e?.sshHost ? `<tr><td>SSH host</td><td><code>${esc(e.sshHost)}</code></td></tr>` : ''}
+            ${e ? `<tr><td>Added</td><td>${new Date(e.addedAt).toLocaleDateString()}</td></tr>` : ''}
+            ${others.length ? `<tr><td colspan="2" class="small muted note">From other software on this device (<code>devices/${esc(d.name)}/…</code>${others.some(([t]) => t.endsWith('/display')) ? '; <code>display</code> is whether pi_display\'s meter app is running' : ''})</td></tr>` : ''}
+            ${others.map(([t, m]) => `<tr><td><code>${esc(t.slice(`devices/${d.name}/`.length))}</code></td><td class="small"><code>${esc(m.text.length > 160 ? `${m.text.slice(0, 160)}…` : m.text)}</code></td></tr>`).join('')}
+          </table>`;
+      }
+
+      const working = busy.has(d.name) || serverJob?.name === d.name;
+      const dis = working || !!serverJob ? ' disabled' : '';
+      // Identify needs software on the device that takes commands: pi_display on a Pi, or a device
+      // whose health lists "identify" in its "commands".
+      const shows = st.topics.get(`devices/${d.name}/display`)?.text === 'online' || (h?.commands ?? []).includes('identify');
+      const identify = h ? `<button data-act="identify"${shows ? ' title="Show this device\'s name on its screen for 30 s"' : ' disabled title="Nothing on this device takes identify commands"'}>Identify</button>` : '';
+      const pi = d.kind === 'raspberry-pi';
+      el.querySelector('.actions').innerHTML = working ? '<button disabled>Working…</button>' : e ? `${identify}
+        <button data-act="edit">Edit</button>
+        ${pi ? `<button data-act="deploy"${dis}>${h ? 'Update agent' : 'Install agent'}</button>` : `<button data-act="login"${dis}>New password</button>`}
+        ${e.outOfService ? '<button data-act="in-service">Return to service</button>' : '<button data-act="out-of-service" title="Taken offline on purpose: stop treating it as a problem">Out of service</button>'}
+        <button data-act="forget"${dis} class="danger">Forget</button>
+        <button data-act="uninstall"${dis} class="danger">${pi ? 'Uninstall' : 'Remove'}</button>` : `
+        ${identify}<button data-act="register"${dis}>Add to registry</button>`;
+    }
+
+    // The settings a firmware device needs, shown once after creating or renewing its login.
+    const loginBlock = (login, b) => `<div class="login"><div class="small"><b>Flash these into the sketch</b> (the password is shown only now; it is also in <code>.run/mqtt/users/${esc(login.username)}.json</code> on the hub PC):</div>
+      <pre>const char* mqttHost = "${esc(b.host)}";
+const uint16_t mqttPort = ${b.port};
+const char* mqttName = "${esc(login.username)}";
+const char* mqttPassword = "${esc(login.password)}";</pre></div>`;
+
+    function showOut(el, text, isError, output, extra = '') {
+      el.querySelector('.out').innerHTML = `<div class="result small ${isError ? 'err' : ''}">${esc(text)}</div>${extra}${output ? `<details${isError ? ' open' : ''}><summary class="small muted">Output</summary><pre>${esc(output)}</pre></details>` : ''}`;
+    }
+
+    async function act(el, name, fn, okText) {
+      busy.add(name);
+      render(state);
+      try {
+        const r = await fn();
+        showOut(el, r.message || okText, false, r.output, r.login ? loginBlock(r.login, r.broker ?? broker) : '');
+      } catch (err) {
+        showOut(el, err.message, true, err.output);
+      }
+      busy.delete(name);
+      render(state);
+    }
+
+    groupsEl.addEventListener('click', (ev) => {
+      const b = ev.target.closest('button[data-act]');
+      if (!b) return;
+      const el = b.closest('.card'), name = el.dataset.name, entry = state.registry.get(name);
+      const d = items.find((x) => x.name === name);
+      const a = b.dataset.act, pi = d?.kind === 'raspberry-pi';
+      const path = `/${encodeURIComponent(name)}`;
+      if (a === 'identify') {
+        act(el, name, () => api('POST', `${path}/identify`, { seconds: 30 }), 'Sent.');
+      } else if (a === 'identify-tablet') {
+        // TabletPanel's own command for a tablet (its app shows its name).
+        act(el, name, async () => {
+          const res = await fetch(`/tabletpanel/api/devices/${encodeURIComponent(d.tablet.id)}/command`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'identify' }),
+          });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`);
+          return { message: 'Sent to the tablet.' };
+        }, 'Sent.');
+      } else if (a === 'edit') {
+        openEditor(name, d, entry);
+      } else if (a === 'deploy') {
+        if (!confirm(`Install or update the health agent on ${name} over SSH (${entry.sshHost})?`)) return;
+        act(el, name, () => api('POST', `${path}/deploy`), 'Agent installed.');
+      } else if (a === 'login') {
+        if (!confirm(`Give ${name} a new MQTT password?\n\nThe old one stops working at once (the broker restarts for a few seconds), so the device is refused until you flash the new one into its sketch.`)) return;
+        act(el, name, () => api('POST', `${path}/login`), 'New password set.');
+      } else if (a === 'forget') {
+        if (!confirm(`Forget ${name}? It's removed from this list; if it keeps reporting, it comes back as "not registered".`)) return;
+        act(el, name, () => api('DELETE', path), 'Forgotten.');
+      } else if (a === 'uninstall') {
+        const msg = pi
+          ? `Uninstall ${name}?\n\nThis stops and deletes the health agent on the Pi over SSH, deletes its MQTT login (restarting the broker for a few seconds) and clears its retained topics. Other software on the Pi that uses the same login (e.g. pi_display) loses its MQTT access too.`
+          : `Remove ${name}?\n\nThis deletes its MQTT login (restarting the broker for a few seconds), so the device is refused from now on, and clears its retained topics. The sketch on the device is not changed.`;
+        if (!confirm(msg)) return;
+        act(el, name, () => api('DELETE', `${path}?uninstall=1`), 'Removed.');
+      } else if (a === 'register') {
+        act(el, name, () => api('POST', '', registerBody(d)), 'Added to the registry.');
+      } else if (a === 'out-of-service') {
+        const note = prompt(`Mark ${name} as out of service (taken offline on purpose until further notice)?\n\nIt stays listed here with a notice, but stops counting as offline elsewhere. Optional note:`, '');
+        if (note === null) return;
+        act(el, name, () => api('PATCH', path, { outOfService: { note } }), 'Marked out of service.');
+      } else if (a === 'in-service') {
+        act(el, name, () => api('PATCH', path, { outOfService: false }), 'Back in service.');
+      }
+    });
+
+    // Registering a device the page found (it reports, or TabletPanel knows the tablet).
+    const registerBody = (d, extra = {}) => ({
+      name: d.name, kind: d.kind ?? 'other', install: false, ...extra,
+      ...(d.kind === 'tablet' ? { deviceId: d.tablet.id, subtitle: d.tablet.name } : {}),
+    });
+
+    // Show alerts: saved in the registry entry (registering the device first if needed).
+    groupsEl.addEventListener('change', (ev) => {
+      const sel = ev.target.closest('select[data-alerts]');
+      if (!sel) return;
+      const el = sel.closest('.card'), name = el.dataset.name, d = items.find((x) => x.name === name);
+      const alerts = sel.value || null;
+      act(el, name, () => (d.entry
+        ? api('PATCH', `/${encodeURIComponent(name)}`, { alerts })
+        : api('POST', '', registerBody(d, { alerts }))), 'Saved.');
+    });
+
+    // Editing happens in a dialog above the page, which the live updates never touch.
+    const editor = document.getElementById('editor'), editForm = document.getElementById('edit-form');
+    function openEditor(name, d, entry) {
+      const pi = d?.kind === 'raspberry-pi', oos = entry?.outOfService;
+      editForm.dataset.name = name;
+      document.getElementById('edit-title').textContent = `Edit ${name}`;
+      editForm.elements.subtitle.value = entry?.subtitle ?? '';
+      editForm.elements.sshHost.value = entry?.sshHost ?? '';
+      editForm.elements.oosNote.value = oos?.note ?? '';
+      editForm.querySelector('[data-for-pi]').hidden = !pi;
+      editForm.querySelector('[data-for-oos]').hidden = !oos;
+      document.getElementById('edit-error').textContent = '';
+      editor.showModal();
+      editForm.elements.subtitle.focus();
+    }
+    editForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      if (ev.submitter?.value === 'cancel') { editor.close(); return; }
+      const f = editForm.elements, name = editForm.dataset.name, entry = state.registry.get(name);
+      const patch = { subtitle: f.subtitle.value };
+      if (!editForm.querySelector('[data-for-pi]').hidden) patch.sshHost = f.sshHost.value.trim();
+      if (entry?.outOfService && f.oosNote.value !== (entry.outOfService.note ?? '')) patch.outOfService = { note: f.oosNote.value };
+      const save = editForm.querySelector('button[value="save"]');
+      save.disabled = true;
+      try {
+        await api('PATCH', `/${encodeURIComponent(name)}`, patch);
+        editor.close();
+      } catch (err) {
+        document.getElementById('edit-error').textContent = err.message;
+      }
+      save.disabled = false;
+    });
+
+    // The Add form shows the SSH fields only for a Raspberry Pi.
+    const addForm = document.getElementById('add');
+    function syncAddForm() {
+      const pi = addForm.elements.kind.value === 'raspberry-pi';
+      for (const el of addForm.querySelectorAll('[data-for="raspberry-pi"]')) el.hidden = !pi;
+      for (const el of addForm.querySelectorAll('[data-for="firmware"]')) el.hidden = pi;
+    }
+    addForm.elements.kind.addEventListener('change', syncAddForm);
+    syncAddForm();
+
+    addForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const f = ev.target.elements, out = document.getElementById('add-result'), button = ev.target.querySelector('button[type=submit]');
+      const kind = f.kind.value, pi = kind === 'raspberry-pi';
+      const body = { name: f.name.value.trim(), kind, subtitle: f.subtitle.value.trim() };
+      if (pi) Object.assign(body, { sshHost: f.sshHost.value.trim() || undefined, install: f.install.checked });
+      button.disabled = true;
+      out.className = 'result small';
+      out.textContent = pi && body.install ? `Adding ${body.name} and installing the agent over SSH… (up to a minute)` : `Adding ${body.name}…`;
+      try {
+        const r = await api('POST', '', body);
+        out.innerHTML = `${esc(r.message || 'Added.')}${r.login ? loginBlock(r.login, r.broker ?? broker) : ''}${r.output ? `<details><summary class="muted">Output</summary><pre>${esc(r.output)}</pre></details>` : ''}`;
+        f.name.value = f.subtitle.value = f.sshHost.value = '';
+        f.install.checked = true;
+      } catch (err) {
+        out.className = 'result small err';
+        out.innerHTML = `${esc(err.message)}${err.output ? `<details open><summary class="muted">Output</summary><pre>${esc(err.output)}</pre></details>` : ''}`;
+      }
+      button.disabled = false;
+    });
+
+    // An install or uninstall started elsewhere (another browser) disables the actions here too.
+    async function pollJob() {
+      try {
+        const r = await (await fetch('/api/devices', { cache: 'no-store' })).json();
+        serverJob = r.job;
+        broker = r.broker ?? broker;
+      } catch { /* keep the last */ }
+      render(state);
+    }
+
+    // Tablets, from TabletPanel (through the front server at /tabletpanel/).
+    async function pollTablets() {
+      try {
+        const res = await fetch('/tabletpanel/api/state', { cache: 'no-store' });
+        if (res.ok) tablets = (await res.json()).devices ?? [];
+      } catch { /* keep the last */ }
+      render(state);
+    }
+
+    const state = mqttBus(render, { sys: true });
+    pollJob();
+    pollTablets();
+    setInterval(pollJob, 10000);
+    setInterval(pollTablets, 15000);
+  </script>
+</body>
+</html>

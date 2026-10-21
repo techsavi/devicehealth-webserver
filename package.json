@@ -1,0 +1,12 @@
+{
+  "name": "webserver",
+  "private": true,
+  "type": "module",
+  "description": "Local services front door: Caddy routes, service supervisor, MQTT broker config and bridges",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "mqtt": "^5.16.0"
+  }
+}

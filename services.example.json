@@ -1,0 +1,26 @@
+[
+  {
+    "name": "mqtt",
+    "title": "MQTT broker",
+    "cwd": "mqtt",
+    "command": ["C:/Program Files/mosquitto/mosquitto.exe", "-c", "mosquitto.conf"],
+    "health": "tcp://127.0.0.1:1883"
+  },
+  {
+    "name": "tabletpanel",
+    "title": "TabletPanel",
+    "cwd": "../tebletpanel/server",
+    "command": ["node", "src/index.js"],
+    "health": "http://127.0.0.1:8787/api/health",
+    "mqttUser": "tabletpanel"
+  },
+  {
+    "name": "statuspanel",
+    "title": "StatusPanel",
+    "cwd": "../linuxserver/local",
+    "command": ["node", "poller.mjs", "run"],
+    "health": "http://127.0.0.1:3003/api/summary",
+    "cleanup": [".run/poller.pid"],
+    "minRestartSeconds": 30
+  }
+]

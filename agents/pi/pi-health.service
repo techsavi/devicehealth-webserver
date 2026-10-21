@@ -1,0 +1,12 @@
+[Unit]
+Description=Raspberry Pi health agent for the local MQTT broker (webserver/agents/pi)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 -u %h/pi-health/pi_health.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

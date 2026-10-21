@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MQTT broker</title>
+  <style>
+    :root {
+      --bg: #0f1419; --card: #18202a; --inner: #0f1419; --line: #2a3542;
+      --text: #e6edf3; --muted: #8b98a5; --accent: #4ea8ff;
+      --ok: #22c55e; --bad: #ef4444; --warn: #f59e0b;
+      color-scheme: dark;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #f3f5f8; --card: #fff; --inner: #f3f5f8; --line: #dde3ea; --text: #17202a; --muted: #5c6b7a; --accent: #1d6fd6; color-scheme: light; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    header { padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--card); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    header h1 { font-size: 19px; margin: 0; }
+    header a { color: var(--accent); text-decoration: none; font-size: 14px; }
+    main { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; padding: 16px; max-width: 1200px; margin: 0 auto; }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+    section.wide { grid-column: 1 / -1; }
+    h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+    .pill { font-size: 12px; padding: 2px 10px; border-radius: 99px; background: var(--line); color: var(--muted); }
+    .pill.on { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+    .pill.off { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+    .stat { background: var(--inner); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-width: 0; }
+    .stat .k { font-size: 12px; color: var(--muted); }
+    .stat .v { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 500; }
+    td.msg { overflow-wrap: anywhere; }
+    .table { overflow-x: auto; }
+    .lvl { font-weight: 600; font-size: 12px; text-transform: uppercase; }
+    .lvl.warning { color: var(--warn); } .lvl.critical { color: var(--bad); } .lvl.info { color: var(--muted); }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--bad); }
+    .dot.online { background: var(--ok); }
+    .muted { color: var(--muted); }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; overflow-wrap: anywhere; }
+    .help p { margin: 0 0 8px; font-size: 14px; }
+    .help pre { background: var(--inner); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-x: auto; margin: 0 0 8px; }
+    .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
+    .bar input { font: inherit; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--inner); color: var(--text); min-width: 220px; }
+    details.group { border-top: 1px solid var(--line); }
+    details.group > summary { cursor: pointer; padding: 6px 2px; font-weight: 600; }
+    details.group > summary .muted { font-weight: 400; font-size: 13px; }
+    td.val { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tag { font-size: 11px; padding: 1px 6px; border-radius: 99px; background: var(--line); color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← Local services</a>
+    <h1>MQTT broker</h1>
+    <span class="pill" id="pill">connecting…</span>
+  </header>
+  <main>
+    <section>
+      <h2>Broker</h2>
+      <div class="stats" id="broker"></div>
+    </section>
+    <section>
+      <h2>Clients</h2>
+      <div id="clients" class="muted">Waiting for status messages…</div>
+    </section>
+    <section class="wide">
+      <h2>Active alerts</h2>
+      <div class="table" id="alerts"></div>
+    </section>
+    <section class="wide">
+      <h2>Message paths</h2>
+      <div class="table"><table>
+        <tr><th>Topic</th><th>Retained</th><th>Published by</th><th>Payload</th></tr>
+        <tr><td><code>alerts/&lt;source&gt;/&lt;id&gt;</code></td><td>yes</td><td>the login named &lt;source&gt;</td>
+          <td class="msg">JSON alert: <code>level</code> (info, warning, critical), <code>title</code>, <code>message</code>, <code>since</code> (epoch s), extra fields. An empty retained message clears it.</td></tr>
+        <tr><td><code>status/&lt;client&gt;</code></td><td>yes</td><td>the login named &lt;client&gt; (and the broker, as its last will)</td>
+          <td class="msg"><code>online</code> / <code>offline</code></td></tr>
+        <tr><td><code>devices/&lt;client&gt;/…</code></td><td>as the device chooses</td><td>the login named &lt;client&gt;</td>
+          <td class="msg">The device's own readings and state, e.g. <code>devices/nodemcu-garage/temperature</code></td></tr>
+        <tr><td><code>$SYS/broker/…</code></td><td></td><td>the broker</td><td class="msg">Mosquitto statistics, every 10 s</td></tr>
+      </table></div>
+    </section>
+    <section class="wide">
+      <h2>Topics seen</h2>
+      <div class="bar">
+        <input id="filter" type="search" placeholder="Filter topics, e.g. devices/ or temperature" aria-label="Filter topics">
+        <span class="muted" id="topic-count"></span>
+      </div>
+      <div class="muted" style="font-size:13px;margin-bottom:6px">MQTT has no topic list: retained topics appear as soon as this page connects, others when something publishes on them.</div>
+      <div id="topics"></div>
+    </section>
+    <section class="wide">
+      <h2>Recent messages</h2>
+      <div class="table" id="log"></div>
+    </section>
+    <section class="wide help">
+      <h2>Publishing</h2>
+      <p>Alerts are retained messages on <code>alerts/&lt;source&gt;/&lt;id&gt;</code> with a JSON body
+        <code>{"level": "info|warning|critical", "title", "message", "since": &lt;epoch s&gt;, ...}</code>;
+        an empty retained message on the same topic clears the alert. Clients announce themselves on
+        <code>status/&lt;name&gt;</code> (<code>online</code>, with <code>offline</code> as their last will).</p>
+      <p>Services and devices (Pis, NodeMCUs...) connect to port 1883 on this PC from the LAN or tailnet, each with
+        its own login: <code>node serve.mjs mqtt-user &lt;name&gt;</code> in the webserver folder (restarts the broker so it works at once).
+        Every login reads <code>alerts/#</code>, <code>devices/#</code> and <code>status/#</code>, and writes only its own
+        <code>alerts/&lt;name&gt;/…</code>, <code>devices/&lt;name&gt;/…</code> and <code>status/&lt;name&gt;</code>
+        (<code>mqtt/acl.conf</code>). This page is read-only.</p>
+      <pre>mosquitto_pub -h &lt;this PC&gt; -u &lt;name&gt; -P &lt;password&gt; -r -t alerts/&lt;name&gt;/test -m '{"level":"info","title":"Test","message":"Hello"}'
+mosquitto_pub -h &lt;this PC&gt; -u &lt;name&gt; -P &lt;password&gt; -r -t alerts/&lt;name&gt;/test -n     # clear it
+mosquitto_sub -h &lt;this PC&gt; -u &lt;name&gt; -P &lt;password&gt; -t 'alerts/#' -v              # watch alerts</pre>
+    </section>
+  </main>
+  <script src="/vendor/mqtt.min.js"></script>
+  <script src="bus.js?v=6"></script>
+  <script>
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const ago = (ms) => {
+      const s = Math.round((Date.now() - ms) / 1000);
+      return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`;
+    };
+    const when = (ms) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const stat = (k, v) => `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v ?? '—')}</div></div>`;
+    const uptime = (v) => {
+      const s = parseInt(v, 10);
+      if (!Number.isFinite(s)) return null;
+      return s < 3600 ? `${Math.round(s / 60)} min` : s < 86400 ? `${Math.round(s / 3600)} h` : `${(s / 86400).toFixed(1)} days`;
+    };
+
+    function render(st) {
+      const pill = document.getElementById('pill');
+      pill.className = `pill ${st.connected ? 'on' : 'off'}`;
+      pill.textContent = st.connected ? 'connected' : st.error ? `unreachable: ${st.error}` : 'unreachable';
+      const s = st.sys;
+      document.getElementById('broker').innerHTML = [
+        stat('Version', s.version?.replace(/^mosquitto version /, '')), stat('Uptime', uptime(s.uptime)),
+        stat('Clients connected', s['clients/connected']), stat('Clients total', s['clients/total']),
+        stat('Subscriptions', s['subscriptions/count']), stat('Retained', s['retained messages/count']),
+        stat('Messages in', s['messages/received']), stat('Messages out', s['messages/sent']),
+      ].join('');
+
+      const clients = [...st.clients].sort(([a], [b]) => a.localeCompare(b));
+      document.getElementById('clients').innerHTML = clients.length
+        ? `<table><tr><th>Client</th><th>State</th></tr>${clients.map(([name, c]) =>
+            `<tr><td><span class="dot ${c.state === 'online' ? 'online' : ''}"></span>${esc(name)}</td><td>${esc(c.state)}</td></tr>`).join('')}</table>`
+        : '<span class="muted">No client has published a status yet.</span>';
+
+      const alerts = mqttAlerts(st);
+      document.getElementById('alerts').innerHTML = alerts.length
+        ? `<table><tr><th>Level</th><th>Source</th><th>Alert</th><th>Since</th><th>Topic</th></tr>${alerts.map((a) => `
+            <tr><td><span class="lvl ${esc(a.level)}">${esc(a.level)}</span></td><td>${esc(mqttSource(a))}</td>
+              <td class="msg"><b>${esc(a.title ?? '')}</b> ${esc(a.message ?? '')}</td>
+              <td title="${a.since ? esc(when(a.since * 1000)) : ''}">${a.since ? ago(a.since * 1000) : '—'}</td>
+              <td><code>alerts/${esc(a.source)}/${esc(a.id)}</code></td></tr>`).join('')}</table>`
+        : '<span class="muted">No active alerts.</span>';
+
+      renderTopics(st);
+
+      document.getElementById('log').innerHTML = st.log.length
+        ? `<table><tr><th>Received</th><th>Topic</th><th>Message</th></tr>${st.log.map((m) => `
+            <tr><td title="${esc(when(m.at))}">${ago(m.at)}${m.retained ? ' <span class="muted">(retained)</span>' : ''}</td>
+              <td><code>${esc(m.topic)}</code></td><td class="msg"><code>${m.text ? esc(m.text) : '<span class="muted">(cleared)</span>'}</code></td></tr>`).join('')}</table>`
+        : '<span class="muted">Nothing received since this page opened.</span>';
+    }
+
+    // Every topic seen, grouped by its first level. A group's open/closed state is kept across
+    // updates ($SYS starts closed).
+    const closed = new Set(['$SYS']);
+    function renderTopics(st) {
+      const filter = document.getElementById('filter').value.trim().toLowerCase();
+      const all = [...st.topics].filter(([t]) => !filter || t.toLowerCase().includes(filter)).sort(([a], [b]) => a.localeCompare(b));
+      document.getElementById('topic-count').textContent = `${all.length} of ${st.topics.size} topics`;
+      const groups = new Map();
+      for (const [topic, m] of all) {
+        const top = topic.split('/')[0];
+        if (!groups.has(top)) groups.set(top, []);
+        groups.get(top).push([topic, m]);
+      }
+      document.getElementById('topics').innerHTML = [...groups].map(([top, rows]) => `
+        <details class="group" data-group="${esc(top)}"${closed.has(top) && !filter ? '' : ' open'}>
+          <summary>${esc(top)}/ <span class="muted">${rows.length} topic${rows.length > 1 ? 's' : ''}</span></summary>
+          <div class="table"><table><tr><th>Topic</th><th>Latest value</th><th></th><th>Messages</th><th>Last</th></tr>${rows.map(([topic, m]) => `
+            <tr><td><code>${esc(topic)}</code></td><td class="val" title="${esc(m.text)}"><code>${esc(m.text)}</code></td>
+              <td>${m.retained ? '<span class="tag">retained</span>' : ''}</td><td>${m.count}</td>
+              <td title="${esc(when(m.at))}">${ago(m.at)}</td></tr>`).join('')}</table></div>
+        </details>`).join('') || `<span class="muted">${filter ? 'No topic matches.' : 'Nothing received yet.'}</span>`;
+    }
+    document.getElementById('topics').addEventListener('toggle', (e) => {
+      const top = e.target.dataset?.group;
+      if (top && !document.getElementById('filter').value) (e.target.open ? closed.delete(top) : closed.add(top));
+    }, true);
+
+    // ?filter=devices/ (the Raspberry Pis tile links here) pre-fills the topic filter.
+    document.getElementById('filter').value = new URLSearchParams(location.search).get('filter') ?? '';
+    const state = mqttBus(render, { sys: true });
+    document.getElementById('filter').addEventListener('input', () => renderTopics(state));
+    setInterval(() => render(state), 30000);
+  </script>
+</body>
+</html>
