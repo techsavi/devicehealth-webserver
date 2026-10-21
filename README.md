@@ -2,13 +2,13 @@
 
 One Caddy server on port 80 that routes paths to services running on this PC and shows a tiles page with a live summary of each. `serve.mjs` is also the single startup service for those services: it runs each one listed in `services.json`, restarts any that exit, and lets you start, stop and restart them from the tiles. An MQTT broker (Mosquitto) carries alerts between the projects and devices: see [MQTT](#mqtt).
 
-It lives in `localweb/` beside the projects it runs (`../linuxserver`, `../tebletpanel`), and every path in it is relative, so the whole `localweb` folder can move. A service of this PC's own may live elsewhere: its path is in the local `services.json` (see [This PC's own services](#this-pcs-own-services)). After a move, run `install-autostart.ps1` again from the new place (its logon task stores the folder).
+It lives in `localweb/` beside the projects it runs (`../linuxserver`, `../tabletweather`), and every path in it is relative, so the whole `localweb` folder can move. A service of this PC's own may live elsewhere: its path is in the local `services.json` (see [This PC's own services](#this-pcs-own-services)). After a move, run `install-autostart.ps1` again from the new place (its logon task stores the folder).
 
 | Path | Routed to | Service |
 | --- | --- | --- |
 | `/` | `front/public/index.html` | Tiles page: live summaries from each service's API |
 | `/statuspanel/` | `127.0.0.1:3003` | StatusPanel dashboard and REST API, served by `../linuxserver/local/poller.mjs` |
-| `/tabletpanel/` | `127.0.0.1:8787` | TabletPanel control UI, REST API and WebSocket, served by `../tebletpanel/server` |
+| `/tabletpanel/` | `127.0.0.1:8787` | TabletPanel control UI, REST API and WebSocket, served by `../tabletweather/server` |
 | `/mqtt/` | `front/public/mqtt/` | MQTT details page: broker statistics, clients, active alerts, recent messages |
 | `/mqtt/ws` | `127.0.0.1:9001` | MQTT over WebSockets for the pages: anonymous and read-only |
 | `/devices/` | `front/public/devices/` | IoT devices (Raspberry Pis, NodeMCUs): full status of each, add, edit, update, identify, forget and remove (`/pis/` redirects here) |
@@ -77,7 +77,7 @@ devices ─────────► status/<client> ────────�
 - **Devices** (Pis, NodeMCUs...): connect to `<this PC>:1883` with their login, set a last will of `offline` on `status/<name>` and publish `online` there (retained), publish readings under `devices/<name>/...`, and subscribe to `alerts/#` (retained, so a device gets the current alerts as soon as it connects).
 - **Retained alerts** are saved in `.run/mqtt/` and survive broker restarts.
 - **Send alert** (the tile on the tiles page) publishes `alerts/manual/<id>` with the `manual` login through `POST /api/alerts` on `serve.mjs`: `{title, message, level, durationSeconds, id?}`, where `durationSeconds` becomes the message's expiry (0 = until cleared) and a fixed `id` (the Doorbell preset's `doorbell`) replaces the previous one. `DELETE /api/alerts/<id>` clears it. Same-origin guard as the service controls.
-- **TabletPanel** subscribes to `alerts/#` itself and relays to the tablets over its WebSocket (`../tebletpanel/server/src/mqtt.js`): warnings and criticals from every source, and every level from `manual` and `tabletpanel`. A tablet chimes when an alert first appears, when its level rises, and every 24 h while it lasts. Dismissing on a tablet hides it there only; it stays on the bus for other displays. Its `POST /api/alerts` publishes `alerts/tabletpanel/<id>`.
+- **TabletPanel** subscribes to `alerts/#` itself and relays to the tablets over its WebSocket (`../tabletweather/server/src/mqtt.js`): warnings and criticals from every source, and every level from `manual` and `tabletpanel`. A tablet chimes when an alert first appears, when its level rises, and every 24 h while it lasts. Dismissing on a tablet hides it there only; it stays on the bus for other displays. Its `POST /api/alerts` publishes `alerts/tabletpanel/<id>`.
 - **NWS weather alerts:** TabletPanel also polls the National Weather Service every 2 minutes for its display location and publishes active alerts as `alerts/tabletpanel/nws-<id>` (`sentBy: "nws"`, plus `area`, `severity`, `urgency`, `nwsId`), expiring when the hazard ends. `critical` is reserved for Extreme and Immediate events (Tornado Warning, Extreme Wind Warning, Flash Flood Emergency), other warnings and watches are `warning`, advisories and statements `info`. The pages label them "NWS".
 - **Adding a publisher or device:** `node serve.mjs mqtt-user <name>`, then publish retained JSON alerts under `alerts/<name>/` and anything else under `devices/<name>/` (and `status/<name>` with a last will). The `/mqtt/` page shows a `mosquitto_pub` example.
 

@@ -58,7 +58,7 @@ http://:80 {
             }
         }
 
-        # TabletPanel control server (../tebletpanel/server). It listens on all interfaces
+        # TabletPanel control server (../tabletweather/server). It listens on all interfaces
         # at 8787 because the tablets connect to it directly; this route adds it to the front page.
         # reverse_proxy passes the WebSocket upgrade at /tabletpanel/ws through unchanged.
         handle_path /tabletpanel/* {

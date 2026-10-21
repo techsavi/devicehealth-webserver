@@ -9,7 +9,7 @@
   {
     "name": "tabletpanel",
     "title": "TabletPanel",
-    "cwd": "../tebletpanel/server",
+    "cwd": "../tabletweather/server",
     "command": ["node", "src/index.js"],
     "health": "http://127.0.0.1:8787/api/health",
     "mqttUser": "tabletpanel"

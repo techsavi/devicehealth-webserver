@@ -39,7 +39,7 @@ async function control(action) {
 async function checkPort(port) {
   await new Promise((resolve, reject) => {
     const server = createTcpServer();
-    server.once('error', () => reject(new Error(`Port ${port} is already in use or unavailable.`)));
+    server.once('error', () => reject(new Error(`Port ${port} is already in use or unavailable (a supervisor that isn't answering? \`node serve.mjs stop\` ends it).`)));
     server.listen(port, '127.0.0.1', () => server.close(resolve));
   });
 }
@@ -625,8 +625,11 @@ async function run() {
     deviceWatcher?.end(true);   // else it keeps reconnecting to the stopped broker, and this process never exits
     child.kill();
     controlServer?.close();
-    if (existsSync(statePath)) unlinkSync(statePath);
-    if (existsSync(childrenPath)) unlinkSync(childrenPath);
+    // Only this run's files: a second copy that failed to start must not remove the running one's.
+    if (readJson(statePath, {}).pid === process.pid) {
+      rmSync(statePath, { force: true });
+      rmSync(childrenPath, { force: true });
+    }
     setTimeout(() => process.exit(), 5000).unref();   // whatever else is left open
   };
   process.on('SIGINT', cleanup);
@@ -683,10 +686,45 @@ async function mqttUser(name) {
   }
 }
 
+// `stop` when the supervisor doesn't answer (hung, e.g. after the PC ran out of memory): end it and
+// everything it started, once its command line shows it really is this folder's supervisor.
+async function forceStop() {
+  // Its pid from .run/state.json, else (the file is gone) the process running this folder's serve.mjs.
+  const script = join(root, 'serve.mjs').toLowerCase();
+  const lines = (process.platform === 'win32'
+    ? spawnSync('powershell', ['-NoProfile', '-Command',
+        `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }`],
+        { encoding: 'utf8', windowsHide: true }).stdout
+    : spawnSync('ps', ['-eo', 'pid=,args='], { encoding: 'utf8' }).stdout) ?? '';
+  const procs = lines.split(/\r?\n/).map(l => l.trim().match(/^(\d+) (.*)$/)).filter(Boolean).map(([, p, c]) => ({ pid: Number(p), cmd: c }));
+  const isOurs = c => c.toLowerCase().includes(script) && / run\s*$/.test(c);
+  const recorded = readJson(statePath, {}).pid;
+  const found = procs.find(p => p.pid === recorded) ?? procs.find(p => isOurs(p.cmd) && p.pid !== process.pid);
+  const pid = found?.pid, cmd = found?.cmd ?? '';
+  const ours = isOurs(cmd);
+  if (pid && cmd && !ours) throw new Error(`Process ${pid} isn't this folder's supervisor (${cmd}); not touching it.`);
+  if (ours) killTree(Number(pid));
+  // Windows can take a while to tear the tree down (longer when it's short of memory).
+  for (let i = 0; ours && i < 60; i++) {
+    try { process.kill(Number(pid), 0); } catch { break; }
+    await sleep(500);
+    if (i === 59) throw new Error(`Process ${pid} is still exiting; check again in a minute.`);
+  }
+  rmSync(statePath, { force: true });
+  rmSync(childrenPath, { force: true });
+  return ours ? `Ended the supervisor (process ${pid}) and everything it started.` : 'Not running.';
+}
+
 try {
   if (command === 'mqtt-user') await mqttUser(process.argv[3]);
   else if (command === 'run') await run();
-  else if (command === 'stop' || command === 'status') console.log(await control(command));
+  else if (command === 'status') console.log(await control(command));
+  else if (command === 'stop') {
+    try { console.log(await control('stop')); } catch (error) {
+      console.log(`The supervisor didn't answer (${error.message}).`);
+      console.log(await forceStop());
+    }
+  }
   else if (command === 'start') {
     try { console.log(await control('status')); process.exit(0); } catch {}
     for (const port of ports) await checkPort(port);
@@ -698,7 +736,7 @@ try {
     child.unref();
     closeSync(output);
     let ready = false;
-    for (let attempt = 0; attempt < 40; attempt++) {
+    for (let attempt = 0; attempt < 120; attempt++) {   // up to 30 s (slower when the PC is short of memory)
       await sleep(250);
       try { console.log(await control('status')); ready = true; break; } catch {}
     }
