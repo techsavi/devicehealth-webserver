@@ -477,10 +477,11 @@ const char* mqttPassword = "${esc(login.password)}";</pre></div>`;
       } else if (a === 'register') {
         act(el, name, () => api('POST', '', registerBody(d)), 'Added to the registry.');
       } else if (a === 'out-of-service') {
-        const note = prompt(`Mark ${name} as out of service (taken offline on purpose until further notice)?\n\nIt stays listed here with a notice, but stops counting as offline elsewhere. Optional note:`, '');
+        const note = prompt(`Mark ${name} as out of service (taken offline on purpose until further notice)?\n\nIt stays listed here with a notice, stops counting as offline elsewhere, and its warnings and errors stop reaching the displays (the MQTT broker restarts for a few seconds). Optional note:`, '');
         if (note === null) return;
         act(el, name, () => api('PATCH', path, { outOfService: { note } }), 'Marked out of service.');
       } else if (a === 'in-service') {
+        if (!confirm(`Return ${name} to service?\n\nIts warnings and errors reach the displays again (the MQTT broker restarts for a few seconds).`)) return;
         act(el, name, () => api('PATCH', path, { outOfService: false }), 'Back in service.');
       }
     });
