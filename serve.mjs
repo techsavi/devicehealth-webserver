@@ -30,7 +30,7 @@ async function control(action) {
   const response = await fetch(`http://127.0.0.1:${controlPort}/${action}`, {
     method: action === 'stop' ? 'POST' : 'GET',
     headers: { Authorization: `Bearer ${state.token}` },
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.timeout(15000),   // patient: the PC may be busy (stop ends a supervisor that never answers)
   });
   if (!response.ok) throw new Error(`Control request failed: ${response.status}`);
   return response.text();
@@ -71,18 +71,21 @@ function setEnabled(name, enabled) {
 
 // A service counts as up only when its health URL answers 200: any other response or none is down.
 // A tcp://host:port health (for services that don't speak HTTP, like the MQTT broker) is up when it accepts a connection.
+// A health check waits up to 10 s: a service on a busy PC (a heavy job running) can be slow to answer
+// without being down. A service that isn't running refuses the connection at once.
+const HEALTH_TIMEOUT_MS = 10000;
 async function isUp(def) {
   if (def.health.startsWith('tcp://')) {
     const { hostname, port } = new URL(def.health);
     return new Promise(done => {
-      const socket = connectTcp({ host: hostname, port: Number(port), timeout: 2000 });
+      const socket = connectTcp({ host: hostname, port: Number(port), timeout: HEALTH_TIMEOUT_MS });
       const finish = up => { socket.destroy(); done(up); };
       socket.once('connect', () => finish(true));
       socket.once('timeout', () => finish(false));
       socket.once('error', () => finish(false));
     });
   }
-  try { return (await fetch(def.health, { signal: AbortSignal.timeout(2000) })).ok; } catch { return false; }
+  try { return (await fetch(def.health, { signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) })).ok; } catch { return false; }
 }
 
 async function waitFor(def, up, ms) {
@@ -232,12 +235,14 @@ async function describe(entry) {
   const { def, child } = entry;
   const running = await isUp(def);
   let state = entry.state;
-  if (child) state = running ? 'running' : 'starting';
+  // Its process is alive but its health check didn't answer: starting, or (after its first minute) busy.
+  if (child) state = running ? 'running' : Date.now() - (entry.startedAt ?? 0) > 60000 ? 'unresponsive' : 'starting';
   else if (running && state !== 'restarting') state = 'external';
   else if (state === 'external') state = 'stopped';
   return {
     name: def.name, title: def.title ?? def.name, enabled: isEnabled(def.name), running, state,
-    message: state === 'external' && !entry.message ? 'Running outside this supervisor.' : entry.message,
+    message: state === 'external' && !entry.message ? 'Running outside this supervisor.'
+      : state === 'unresponsive' ? 'Running, but slow to answer: the PC may be busy.' : entry.message,
     pid: child?.pid ?? null,
     uptimeSeconds: child && entry.startedAt ? Math.round((Date.now() - entry.startedAt) / 1000) : null,
     restarts: entry.restarts, busy: busy.has(def.name),

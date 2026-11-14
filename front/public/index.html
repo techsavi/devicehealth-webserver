@@ -206,6 +206,18 @@
       </div>`;
     }
 
+    // A tile whose refresh fails within 3 minutes of its last good one keeps that data and says it is
+    // retrying: on a busy PC (a heavy job running) a service can be slow without being down.
+    const lastOk = {};
+    const GRACE_MS = 180000;
+    function softFail(name, pill, e) {
+      if (!lastOk[name] || Date.now() - lastOk[name] > GRACE_MS) return false;
+      pill.className = 'pill warn';
+      pill.textContent = 'retrying…';
+      pill.title = `Last refresh failed (${e.message}); showing data from ${ago(new Date(lastOk[name]).toISOString())}.`;
+      return true;
+    }
+
     async function refreshTabletPanel() {
       const pill = document.getElementById('tp-pill');
       const body = document.getElementById('tp-body');
@@ -214,6 +226,8 @@
         if (res.status === 401) throw new Error('API key required');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const state = await res.json();
+        lastOk.tabletpanel = Date.now();
+        pill.title = '';
         const online = state.devices.filter((d) => d.connected).length;
         pill.className = `pill ${online ? 'on' : 'off'}`;
         pill.textContent = `${online} of ${state.devices.length} online`;
@@ -223,6 +237,7 @@
           ? state.devices.map(deviceHtml).join('') + alerts
           : `<div class="meta">Weather display control. No tablets have connected yet.</div>${alerts}`;
       } catch (e) {
+        if (softFail('tabletpanel', pill, e)) return;
         pill.className = 'pill off';
         pill.textContent = 'unavailable';
         body.className = 'meta';
@@ -249,6 +264,8 @@
         const res = await fetch('/statuspanel/api/summary', { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const s = await res.json();
+        lastOk.statuspanel = Date.now();
+        pill.title = '';
         const [cls, label] = s.stale ? ['', 'stale'] : PILL[s.overall] ?? ['', s.overall];
         pill.className = `pill ${cls}`;
         pill.textContent = label;
@@ -268,6 +285,7 @@
           ${issues ? `<ul class="issues">${issues}</ul>` : '<div class="meta">No warnings - all checks passing.</div>'}
           ${more > 0 ? `<div class="meta">+${more} more</div>` : ''}`;
       } catch (e) {
+        if (softFail('statuspanel', pill, e)) return;
         pill.className = 'pill off';
         pill.textContent = 'unavailable';
         body.className = 'meta';
@@ -285,6 +303,7 @@
     const STATE = {
       running: ['on', 'running'], starting: ['wait', 'starting…'], restarting: ['wait', 'restarting…'],
       stopped: ['off', 'stopped'], external: ['wait', 'running outside supervisor'], error: ['off', 'error'],
+      unresponsive: ['wait', 'not answering'],
     };
     const uptime = (s) => (s == null ? '' : s < 3600 ? ` · up ${Math.max(1, Math.round(s / 60))} min` : s < 86400 ? ` · up ${Math.round(s / 3600)} h` : ` · up ${Math.round(s / 86400)} d`);
 
